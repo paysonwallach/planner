@@ -1,0 +1,7 @@
+version: "1"
+rules:
+  - base: upstream
+    upstream: alainm23:master
+    mergeMethod: hardreset
+    conflictReviewers:
+      - paysonwallach
