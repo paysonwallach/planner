@@ -37,13 +37,22 @@ public class Database : GLib.Object {
         session = new Soup.Session ();
 
         int rc = 0;
-        db_path = Environment.get_user_data_dir () + "/com.github.alainm23.planner/database.db";
 
+        db_path = get_database_path ();
         rc = Sqlite.Database.open (db_path, out db);
 
         if (rc != Sqlite.OK) {
             stderr.printf ("Can't open database: %d, %s\n", rc, db.errmsg ());
             Gtk.main_quit ();
+        }
+    }
+
+    public string get_database_path () {
+        var database_location_use_default = PlannerQuickAdd.settings.get_boolean ("database-location-use-default");
+        if (database_location_use_default) {
+            return Environment.get_user_data_dir () + "/com.github.alainm23.planner/database.db";
+        } else {
+            return PlannerQuickAdd.settings.get_string ("database-location-path");
         }
     }
 
@@ -67,7 +76,7 @@ public class Database : GLib.Object {
         int res;
 
         sql = """
-            SELECT * FROM Projects WHERE inbox_project = 0 ORDER BY item_order;
+            SELECT * FROM Projects ORDER BY item_order;
         """;
 
         res = db.prepare_v2 (sql, -1, out stmt);
@@ -434,6 +443,28 @@ public class Database : GLib.Object {
         });
     }
 
+    public string get_encode_text (string text) {
+        return text.replace ("&", "%26").replace ("#", "%23");
+    }
+
+    public string get_todoist_datetime_format (string date) {
+        var datetime = new GLib.DateTime.from_iso8601 (date, new GLib.TimeZone.local ());
+        return datetime.format ("%F") + "T" + datetime.format ("%T");
+    }
+    
+    public bool has_time_from_string (string date) {
+        return has_time (new GLib.DateTime.from_iso8601 (date, new GLib.TimeZone.local ()));
+    }
+
+    public bool has_time (GLib.DateTime datetime) {
+        bool returned = true;
+        if (datetime.get_hour () == 0 && datetime.get_minute () == 0 && datetime.get_second () == 0) {
+            returned = false;
+        }
+
+        return returned;
+    }
+    
     public string get_add_item_json (Item item, string temp_id, string uuid) {
         var builder = new Json.Builder ();
         builder.begin_array ();
@@ -452,10 +483,13 @@ public class Database : GLib.Object {
             builder.begin_object ();
 
             builder.set_member_name ("content");
-            builder.add_string_value (item.content);
+            builder.add_string_value (get_encode_text (item.content));
 
             builder.set_member_name ("project_id");
             builder.add_int_value (item.project_id);
+
+            builder.set_member_name ("priority");
+            builder.add_int_value (item.priority);
 
             if (item.parent_id != 0) {
                 builder.set_member_name ("parent_id");
@@ -467,6 +501,25 @@ public class Database : GLib.Object {
                 builder.add_int_value (item.section_id);
             }
 
+            if (item.due_date != "") {
+                builder.set_member_name ("due");
+                builder.begin_object ();
+
+                builder.set_member_name ("date");
+                if (has_time_from_string (item.due_date)) {
+                    builder.add_string_value (get_todoist_datetime_format (item.due_date));
+                } else {
+                    builder.add_string_value (
+                        new GLib.DateTime.from_iso8601 (
+                            item.due_date,
+                            new GLib.TimeZone.local ()
+                        ).format ("%F")
+                    );
+                }
+
+                builder.end_object ();
+            }
+
             builder.end_object ();
         builder.end_object ();
         builder.end_array ();
@@ -474,6 +527,8 @@ public class Database : GLib.Object {
         Json.Generator generator = new Json.Generator ();
         Json.Node root = builder.get_root ();
         generator.set_root (root);
+
+        print ("%s\n".printf (generator.to_data (null)));
 
         return generator.to_data (null);
     }

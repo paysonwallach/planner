@@ -237,6 +237,8 @@ public class Widgets.AreaRow : Gtk.ListBoxRow {
 
         listbox.row_selected.connect ((row) => {
             if (row != null) {
+                Planner.event_bus.unselect_all ();
+                
                 var project = ((Widgets.ProjectRow) row).project;
                 Planner.utils.pane_project_selected (project.id, area.id);
             }
@@ -412,7 +414,7 @@ public class Widgets.AreaRow : Gtk.ListBoxRow {
 
     private void toggle_hidden () {
         if (toggle_timeout != 0) {
-            Source.remove (timeout_id);
+            Source.remove (toggle_timeout);
             top_eventbox.get_style_context ().remove_class ("active");
         }
 
@@ -675,7 +677,7 @@ public class Widgets.AreaRow : Gtk.ListBoxRow {
         delete_menu.activate.connect (() => {
             var message_dialog = new Granite.MessageDialog.with_image_from_icon_name (
                 _("Delete folder"),
-                _("Are you sure you want to delete <b>%s</b>?".printf (area.name)),
+                _("Are you sure you want to delete <b>%s</b>?".printf (Planner.utils.get_dialog_text (area.name))),
                 "user-trash-full",
                 Gtk.ButtonsType.CLOSE
             );
