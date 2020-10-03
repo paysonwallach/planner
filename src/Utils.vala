@@ -376,15 +376,15 @@ public class Utils : GLib.Object {
 
                 file_from_uri.copy_async.begin (file_path, 0, Priority.DEFAULT, null, (current_num_bytes, total_num_bytes) => { // vala-lint=line-length
                     // Report copy-status:
-                    print ("%" + int64.FORMAT + " bytes of %" + int64.FORMAT + " bytes copied.\n", current_num_bytes, total_num_bytes); // vala-lint=line-length
+                    debug ("%" + int64.FORMAT + " bytes of %" + int64.FORMAT + " bytes copied.\n", current_num_bytes, total_num_bytes); // vala-lint=line-length
                 }, (obj, res) => {
                     try {
                         if (file_from_uri.copy_async.end (res)) {
-                            print ("Avatar Profile Downloaded\n");
+                            debug ("Avatar Profile Downloaded\n");
                             Planner.todoist.avatar_downloaded (id);
                         }
                     } catch (Error e) {
-                        print ("Error: %s\n", e.message);
+                        debug ("Error: %s\n", e.message);
                     }
 
                     loop.quit ();
@@ -434,7 +434,7 @@ public class Utils : GLib.Object {
         try {
             keyfile.load_from_file (dest_path, KeyFileFlags.NONE);
             keyfile.set_boolean ("Desktop Entry", "X-GNOME-Autostart-enabled", active);
-            keyfile.set_string ("Desktop Entry", "Exec", "com.github.alainm23.planner --s");
+            keyfile.set_string ("Desktop Entry", "Exec", "com.github.alainm23.planner -s");
             keyfile.save_to_file (dest_path);
         } catch (Error e) {
             warning ("Error enabling autostart: %s", e.message);
@@ -503,7 +503,7 @@ public class Utils : GLib.Object {
         return false;
     }
 
-    private GLib.DateTime get_format_date (GLib.DateTime date) {
+    public GLib.DateTime get_format_date (GLib.DateTime date) {
         return new DateTime.local (
             date.get_year (),
             date.get_month (),
@@ -569,6 +569,24 @@ public class Utils : GLib.Object {
         return date.format (Granite.DateTime.get_default_time_format (is_clock_format_12h (), false));
     }
 
+    public bool has_time (GLib.DateTime datetime) {
+        bool returned = true;
+        if (datetime.get_hour () == 0 && datetime.get_minute () == 0 && datetime.get_second () == 0) {
+            returned = false;
+        }
+
+        return returned;
+    }
+
+    public bool has_time_from_string (string date) {
+        return has_time (new GLib.DateTime.from_iso8601 (date, new GLib.TimeZone.local ()));
+    }
+
+    public string get_default_time_format () {
+        var settings = new Settings ("org.gnome.desktop.interface");
+        return Granite.DateTime.get_default_time_format (settings.get_enum ("clock-format") == 1, false);
+    }
+
     public string get_relative_date_from_date (GLib.DateTime date) {
         if (Planner.utils.is_today (date)) {
             return _("Today");
@@ -581,11 +599,17 @@ public class Utils : GLib.Object {
         }
     }
 
-    public GLib.DateTime get_todoist_datetime (string date) {
-        if (is_full_day_date (date)) {
+    public string get_todoist_datetime_format (string date) {
+        var datetime = new GLib.DateTime.from_iso8601 (date, new GLib.TimeZone.local ());
+        return datetime.format ("%F") + "T" + datetime.format ("%T");
+    }
+
+    public GLib.DateTime? get_todoist_datetime (string date) {
+        GLib.DateTime datetime = null;
+        if (date.length == 10) { // YYYY-MM-DD 
             var _date = date.split ("-");
 
-            return new GLib.DateTime.local (
+            datetime = new GLib.DateTime.local (
                 int.parse (_date [0]),
                 int.parse (_date [1]),
                 int.parse (_date [2]),
@@ -593,11 +617,11 @@ public class Utils : GLib.Object {
                 0,
                 0
             );
-        } else {
+        } else if (date.length == 19) { // YYYY-MM-DDTHH:MM:SS
             var _date = date.split ("T") [0].split ("-");
             var _time = date.split ("T") [1].split (":");
 
-            return new GLib.DateTime.local (
+            datetime = new GLib.DateTime.local (
                 int.parse (_date [0]),
                 int.parse (_date [1]),
                 int.parse (_date [2]),
@@ -605,11 +629,24 @@ public class Utils : GLib.Object {
                 int.parse (_time [1]),
                 int.parse (_time [2])
             );
-        }
-    }
+        } else { // YYYY-MM-DDTHH:MM:SSZ
+            var _date = date.split ("T") [0].split ("-");
+            // var _time = date.split ("T") [1].split (":");
 
-    public bool is_full_day_date (string datetime) {
-        return datetime.length <= 10;
+            datetime = new GLib.DateTime.local (
+                int.parse (_date [0]),
+                int.parse (_date [1]),
+                int.parse (_date [2]),
+                0,
+                0,
+                0
+                // int.parse (_time [0]),
+                // int.parse (_time [1]),
+                // int.parse (_time [2].substring (0, 2))
+            );
+        }
+
+        return datetime;
     }
 
     public GLib.DateTime? get_next_recurring_due_date (Objects.Item item, int value=1) {
@@ -785,9 +822,9 @@ public class Utils : GLib.Object {
         }
     }
 
-    public void set_quick_add_shortcut (string QUICK_ADD_SHORTCUT) { // vala-lint=naming-convention
+    public void set_quick_add_shortcut (string QUICK_ADD_SHORTCUT, bool enabled) { // vala-lint=naming-convention
         var QUICKADD_COMMAND = "com.github.alainm23.planner.quick-add";
-        if (get_os_info ("PRETTY_NAME") == null || get_os_info ("PRETTY_NAME").index_of ("elementary") == -1) {
+        if (is_flatpak ()) {
             QUICKADD_COMMAND = "flatpak run --command=com.github.alainm23.planner.quick-add com.github.alainm23.planner";
         }
 
@@ -795,12 +832,17 @@ public class Utils : GLib.Object {
         bool has_shortcut = false;
         foreach (var shortcut in Services.CustomShortcutSettings.list_custom_shortcuts ()) {
             if (shortcut.command == QUICKADD_COMMAND) {
-                Services.CustomShortcutSettings.edit_shortcut (shortcut.relocatable_schema, QUICK_ADD_SHORTCUT);
+                if (enabled) {
+                    Services.CustomShortcutSettings.edit_shortcut (shortcut.relocatable_schema, QUICK_ADD_SHORTCUT);
+                } else {
+                    Services.CustomShortcutSettings.edit_shortcut (shortcut.relocatable_schema, "");
+                }
+                
                 has_shortcut = true;
                 return;
             }
         }
-        if (!has_shortcut) {
+        if (!has_shortcut && enabled) {
             var shortcut = Services.CustomShortcutSettings.create_shortcut ();
             if (shortcut != null) {
                 Services.CustomShortcutSettings.edit_shortcut (shortcut, QUICK_ADD_SHORTCUT);
@@ -858,56 +900,55 @@ public class Utils : GLib.Object {
         var item_01 = new Objects.Item ();
         item_01.id = generate_id ();
         item_01.project_id = project.id;
-        item_01.content = _("Keeping track of your tasks");
-        item_01.note = _("It turns out, our brains are actually wired to keep us thinking about our unfinished tasks. Handy when you have one thing you need to work on. Not so good when you have 30+ tasks vying for your attention at once. That’s why the first step to organizing your work and life is getting everything out of your head and onto your to-do list. From there you can begin to organize and prioritize so you know exactly what to focus on and when."); // vala-lint=line-length
+        item_01.content = _("Adding new tasks");
+        item_01.note = _("To add a new task to Planner, just click + and press Enter."); // vala-lint=line-length
 
-        var item_02 = new Objects.Item ();
-        item_02.id = generate_id ();
-        item_02.project_id = project.id;
-        item_02.content = _("Adding new tasks");
-        item_02.note = _("""- To add a new task to Planner, just click + and press Enter.
-- When your task is created, click on the task to be able to edit it, add a note or some other options.""");
+//          var item_02 = new Objects.Item ();
+//          item_02.id = generate_id ();
+//          item_02.project_id = project.id;
+//          item_02.content = _("Beautiful and easy to use tasks");
+//          item_02.note = _("");
 
-        var item_03 = new Objects.Item ();
-        item_03.id = generate_id ();
-        item_03.project_id = project.id;
-        item_03.content = _("Due dates");
-        item_03.note = _("""- If you know you need to have the task done on a certain day, click on the calendar icon and select a date.
-- If you want to delete the due date, repeat the process and select the "undate" option.""");
+//          var item_03 = new Objects.Item ();
+//          item_03.id = generate_id ();
+//          item_03.project_id = project.id;
+//          item_03.content = _("Due dates");
+//          item_03.note = _("""- If you know you need to have the task done on a certain day, click on the calendar icon and select a date.
+//  - If you want to delete the due date, repeat the process and select the "undate" option.""");
 
-        var item_04 = new Objects.Item ();
-        item_04.id = generate_id ();
-        item_04.project_id = project.id;
-        item_04.content = _("How to use projects");
-        item_04.note = _("""- Whether you’re planning a presentation, preparing for an event or creating a website, create a project so all the important details are saved in one central place.
-- In the navigation menu on the left, at the bottom, click on the + symbol.
-- In the options menu select 'Project' and type out the name of your new project.
-- Select a source from the drop-down menu.
-- (Optional) Select a different project color from the color list.
-- Click Add to create the project.""");
+//          var item_04 = new Objects.Item ();
+//          item_04.id = generate_id ();
+//          item_04.project_id = project.id;
+//          item_04.content = _("How to use projects");
+//          item_04.note = _("""- Whether you’re planning a presentation, preparing for an event or creating a website, create a project so all the important details are saved in one central place.
+//  - In the navigation menu on the left, at the bottom, click on the + symbol.
+//  - In the options menu select 'Project' and type out the name of your new project.
+//  - Select a source from the drop-down menu.
+//  - (Optional) Select a different project color from the color list.
+//  - Click Add to create the project.""");
 
-        var section = new Objects.Section ();
-        section.id = generate_id ();
-        section.project_id = project.id;
-        section.name = _("Sections");
+//          var section = new Objects.Section ();
+//          section.id = generate_id ();
+//          section.project_id = project.id;
+//          section.name = _("Sections");
 
-        var item_05 = new Objects.Item ();
-        item_05.id = generate_id ();
-        item_05.project_id = project.id;
-        item_05.section_id = section.id;
-        item_05.content = _("Add sections");
-        item_05.note = _("""- It’s always easier to take on a big project when you split it into easily manageable parts using Planner’s sections.
-- Organize your projects with sections to group your tasks together and get a better overview of what needs to be done. Add sections to your project, drag the relevant tasks to the section they belong in, and you’ll find it a lot easier to make progress (instead of getting overwhelmed by a single long list).
-- At the top right of a project, click the + icon.
-- Type the name of your section and click Add.""");
+//          var item_05 = new Objects.Item ();
+//          item_05.id = generate_id ();
+//          item_05.project_id = project.id;
+//          item_05.section_id = section.id;
+//          item_05.content = _("Add sections");
+//          item_05.note = _("""- It’s always easier to take on a big project when you split it into easily manageable parts using Planner’s sections.
+//  - Organize your projects with sections to group your tasks together and get a better overview of what needs to be done. Add sections to your project, drag the relevant tasks to the section they belong in, and you’ll find it a lot easier to make progress (instead of getting overwhelmed by a single long list).
+//  - At the top right of a project, click the + icon.
+//  - Type the name of your section and click Add.""");
 
         Planner.database.insert_project (project);
         Planner.database.insert_item (item_01);
-        Planner.database.insert_item (item_02);
-        Planner.database.insert_item (item_03);
-        Planner.database.insert_item (item_04);
-        Planner.database.insert_section (section);
-        Planner.database.insert_item (item_05);
+        // Planner.database.insert_item (item_02);
+        // Planner.database.insert_item (item_03);
+        // Planner.database.insert_item (item_04);
+        // Planner.database.insert_section (section);
+        // Planner.database.insert_item (item_05);
 
         return project;
     }
@@ -948,19 +989,16 @@ public class Utils : GLib.Object {
         var patrons = new Gee.ArrayList<string> ();
 
         patrons.add ("Cassidy James");
-        patrons.add ("Wout");
-        patrons.add ("The Linux Experiment");
-        patrons.add ("William Tumeo");
-        patrons.add ("Cal");
-        patrons.add ("Coryn");
-        patrons.add ("Marco Bluethgen");
         patrons.add ("Luke Gaudreau");
-        patrons.add ("I Sutter");
-        patrons.add ("M");
+        patrons.add ("Marco Bluethgen");
+        patrons.add ("William Tumeo");
         patrons.add ("James");
-        patrons.add ("Sampath Rajapakse");
         patrons.add ("Kyle Riedemann");
         patrons.add ("Richard Prammer");
+        patrons.add ("Robert Zelník");
+        patrons.add ("Jonathan Klimt");
+        patrons.add ("Jeremiah C. Foster");
+        patrons.add ("Mateusz Pogrzebski");
 
         return patrons;
     }
@@ -982,25 +1020,51 @@ public class Utils : GLib.Object {
         return avatars [GLib.Random.int_range (0, avatars.size)];
     }
 
-    public string get_markup_format (string text) {
-        Regex urlRegex = /(?P<url>(http|https)\:\/\/[a-zA-Z0-9\-\.]+\.[a-zA-Z]+(\/\S*))/;
-        Regex mailtoRegex = /(?P<mailto>[a-zA-Z0-9\._\%\+\-]+@[a-zA-Z0-9\-\.]+\.[a-zA-Z]+(\S*))/;
+    public string get_markup_format (string _text, int is_todoist=0) {
+        var text = get_dialog_text (_text);
+
+        Regex mailto_regex = /(?P<mailto>[a-zA-Z0-9\._\%\+\-]+@[a-zA-Z0-9\-\.]+\.[a-zA-Z]+(\S*))/;
+        Regex url_regex = /(?P<url>(http|https)\:\/\/[a-zA-Z0-9\-\.]+\.[a-zA-Z]+(\/\S*))/;
+                
+        Regex italic_bold_regex = /\*\*\*(.*?)\*\*\*/;
+        Regex bold_regex = /\*\*(.*?)\*\*/;
+        Regex italic_regex = /\*(.*?)\*/;
+
         MatchInfo info;
         try {
             List<string> urls = new List<string>();
-            if (urlRegex.match (text, 0, out info)) {
+            if (url_regex.match (text, 0, out info)) {
                 do {
                     var url = info.fetch_named ("url");
                     urls.append (url);
                 } while (info.next ());
             }
             List<string> emails = new List<string>();
-            if (mailtoRegex.match (text, 0, out info)) {
+            if (mailto_regex.match (text, 0, out info)) {
                 do {
                     var email = info.fetch_named ("mailto");
                     emails.append (email);
                 } while (info.next ());
             }
+            Gee.ArrayList<RegexMarkdown> bolds_01 = new Gee.ArrayList<RegexMarkdown>();
+            if (bold_regex.match (text, 0, out info)) {
+                do {
+                    bolds_01.add (new RegexMarkdown (info.fetch (0), info.fetch (1)));
+                } while (info.next ());
+            }
+            Gee.ArrayList<RegexMarkdown> italics_01 = new Gee.ArrayList<RegexMarkdown>();
+            if (italic_regex.match (text, 0, out info)) {
+                do {
+                    italics_01.add (new RegexMarkdown (info.fetch (0), info.fetch (1)));
+                } while (info.next ());
+            }
+            Gee.ArrayList<RegexMarkdown> italic_bold = new Gee.ArrayList<RegexMarkdown>();
+            if (italic_bold_regex.match (text, 0, out info)) {
+                do {
+                    italic_bold.add (new RegexMarkdown (info.fetch (0), info.fetch (1)));
+                } while (info.next ());
+            }
+
             var converted = text;
             urls.foreach ((url) => {
                 var urlEncoded = url.replace ("&", "&amp;");
@@ -1011,49 +1075,117 @@ public class Utils : GLib.Object {
                 var emailAsLink = @"<a href=\"mailto:$email\">$email</a>";
                 converted = converted.replace (email, emailAsLink);
             });
+            foreach (RegexMarkdown m in italic_bold) {
+                string format = "<i><b>"+m.text+"</b></i>";
+                converted = converted.replace (m.match, format);
+            }
+            foreach (RegexMarkdown m in bolds_01) {
+                string format = "<b>"+m.text+"</b>";
+                converted = converted.replace (m.match, format);
+            }
+            foreach (RegexMarkdown m in italics_01) {
+                string format = "<i>"+m.text+"</i>";
+                converted = converted.replace (m.match, format);
+            }
+
             return converted;
         } catch (GLib.RegexError ex) {
             return text;
         }
     }
 
-    public void parse_item_tags (Objects.Item item, string text) {
-        var clean_text = "";
-        Regex word_regex = /\S+\s*/;
-        MatchInfo match_info;
-        
-        var match_text = text. strip ();
-        for (word_regex.match (match_text, 0, out match_info) ; match_info.matches () ; match_info.next ()) {
-            var word = match_info.fetch (0);
-            var stripped =    word.strip ().down ();
-
-            switch (stripped) {
-                case TODAY:
-                    item.due_date = new GLib.DateTime.now_local ().to_string ();
-                    break;
-                case TOMORROW:
-                    item.due_date = new GLib.DateTime.now_local ().add_days (1).to_string ();
-                    break;
-                case "p1":
-                    item.priority = 4;
-                    break;
-                case "p2":
-                    item.priority = 3;
-                    break;
-                case "p3":
-                    item.priority = 2;
-                    break;
-                case "p4":
-                    item.priority = 1;
-                    break;
-                default:
-                    clean_text+= word;
-                    break;
+    public string get_markdown_to_markup (string text, string identifier, string htmltag) {
+        var array = text.split (identifier);
+        string previous = "";
+        int previous_i;
+        for (int i = 0; i < array.length; i++) {
+            if (i % 2 == 1) {
+                //odd number
+            } else if (i != 0) {
+                previous_i = i - 1;
+                if (htmltag == "***" || htmltag == "___") {
+                    array [previous_i] = "<i><b>"+previous+"</b></i>";
+                } else {
+                    array [previous_i] = "<"+htmltag+">"+previous+"</"+htmltag+">";
+                }
             }
+            previous = array[i];
         }
-
-        item.content = clean_text;
+        var newtext = "";
+        for (int i = 0; i < array.length; i++) {
+            newtext += array[i];
+        }
+        return newtext;
     }
+
+    private string get_datetime (GLib.DateTime date) {
+        GLib.DateTime datetime;
+        //  if (time_switch.active) {
+        //      datetime = new GLib.DateTime.local (
+        //          date.get_year (),
+        //          date.get_month (),
+        //          date.get_day_of_month (),
+        //          time_picker.time.get_hour (),
+        //          time_picker.time.get_minute (),
+        //          time_picker.time.get_second ()
+        //      );
+        //  } else {
+            datetime = new GLib.DateTime.local (
+                date.get_year (),
+                date.get_month (),
+                date.get_day_of_month (),
+                0,
+                0,
+                0
+            );
+        // }
+
+        return datetime.to_string ();
+    }
+
+    //  public void parse_item_tags (Objects.Item item, string text) {
+    //      var clean_text = "";
+    //      Regex word_regex = /\S+\s*/;
+    //      MatchInfo match_info;
+        
+    //      try {
+    //          var match_text = text.strip ();
+    //      for (word_regex.match (match_text, 0, out match_info) ; match_info.matches () ; match_info.next ()) {
+    //          var word = match_info.fetch (0);
+    //          var stripped = word.strip ().down ();
+
+    //          switch (stripped) {
+    //              case TODAY:
+    //                  item.due_date = get_datetime (new GLib.DateTime.now_local ());
+    //                  clean_text+= word;
+    //                  break;
+    //              case TOMORROW:
+    //                  item.due_date = get_datetime (new GLib.DateTime.now_local ().add_days (1));
+    //                  clean_text+= word;
+    //                  break;
+    //              case "p1":
+    //                  item.priority = 4;
+    //                  break;
+    //              case "p2":
+    //                  item.priority = 3;
+    //                  break;
+    //              case "p3":
+    //                  item.priority = 2;
+    //                  break;
+    //              case "p4":
+    //                  item.priority = 1;
+    //                  break;
+    //              default:
+    //                  clean_text+= word;
+    //                  break;
+    //          }
+    //          }
+    //      } catch (GLib.RegexError ex) {
+    //          return text;
+    //      }
+
+    //      item.content = clean_text;
+    //  }
 
     public string build_undo_object (string type, string object_type, int64 object_id, string undo_type, string undo_value) {
         var builder = new Json.Builder ();
@@ -1088,5 +1220,33 @@ public class Utils : GLib.Object {
         generator.set_root (root);
         
         return generator.to_data (null);
+    }
+
+    public bool is_flatpak () {
+        var is_flatpak = Environment.get_variable ("FLATPAK_ID");
+        if (is_flatpak != null) {
+            return true;
+        }
+    
+        return false;
+    }
+
+    public string get_dialog_text (string text) {
+        return text.replace ("&", "&amp;").replace ("<", "&lt;").replace (">", "&gt;");
+    }
+
+    public string get_encode_text (string text) {
+        return text.replace ("&", "%26").replace ("#", "%23");
+    }
+}
+
+public class RegexMarkdown {
+    public string match { get; set; }
+    public string text { get; set; }
+    public string extra { get; set; }
+    public RegexMarkdown (string match, string text, string extra="") {
+        this.match = match;
+        this.text = text;
+        this.extra = extra;
     }
 }

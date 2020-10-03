@@ -34,15 +34,8 @@ public class Objects.Item : GLib.Object {
     public int checked { get; set; default = 0; }
     public int is_deleted { get; set; default = 0; }
     public int is_todoist { get; set; default = 0; }
-
-    public string _content = "";
-    public string content {
-        get { return _content; }
-        set { _content = value.replace ("&", " "); }
-    }
-
+    public string content { get; set; default = ""; }
     public string note { get; set; default = ""; }
-
     public string due_date { get; set; default = ""; }
     public string due_timezone { get; set; default = ""; }
     public string due_string { get; set; default = ""; }
@@ -84,7 +77,7 @@ public class Objects.Item : GLib.Object {
             Source.remove (timeout_id_2);
         }
 
-        timeout_id_2 = Timeout.add (2500, () => {
+        timeout_id_2 = Timeout.add (250, () => {
             timeout_id_2 = 0;
             this.date_updated = new GLib.DateTime.now_local ().to_string ();
 
@@ -120,13 +113,11 @@ public class Objects.Item : GLib.Object {
 
         if (is_todoist == 1) {
             var temp_id_mapping = Planner.utils.generate_id ();
-            Planner.todoist.item_added_completed.connect ((_temp_id_mapping) => {
-                if (temp_id_mapping == _temp_id_mapping) {
-                    Planner.notifications.send_notification (_("Task duplicate"));
-                }
-            });
-
             Planner.todoist.add_item (item, -1, temp_id_mapping);
+            Planner.notifications.send_undo_notification (
+                _("Duplicating task…"),
+                Planner.utils.build_undo_object ("item_duplicate", "item", temp_id_mapping, "", "")
+            );
         } else {
             item.id = Planner.utils.generate_id ();
             if (Planner.database.insert_item (item, -1)) {
@@ -179,6 +170,9 @@ public class Objects.Item : GLib.Object {
 
         builder.set_member_name ("content");
         builder.add_string_value (this.content);
+
+        builder.set_member_name ("note");
+        builder.add_string_value (this.note);
 
         builder.set_member_name ("checked");
         builder.add_int_value (this.checked);

@@ -21,6 +21,29 @@
 
 public class PlannerQuickAdd : Gtk.Application {
     private const string CSS = """
+        @define-color base_color %s;    
+
+        decoration {
+            box-shadow:
+                0 0 0 1px alpha(@theme_bg_color, 0),
+                0 14px 28px alpha(@theme_bg_color, 0),
+                0 10px 10px alpha(@theme_bg_color, 0);
+        }
+
+        .quick-add {
+            background: alpha(@theme_bg_color, 0);
+        }
+
+        .titlebar {
+            background: alpha(@theme_bg_color, 0);
+            border: none;
+            color: alpha(@theme_bg_color, 0);
+            font-size: 0.001px;
+            margin: 0;
+            opacity: 0;
+            padding: 0;
+        }
+
         entry {
             caret-color: #3689e6;
         }
@@ -36,6 +59,11 @@ public class PlannerQuickAdd : Gtk.Application {
 
         .checklist-button check {
             border-radius: 4px;
+        }
+
+        .active-switch slider {
+            min-height: 16px;
+            min-width: 16px;
         }
 
         .content-entry {
@@ -66,6 +94,72 @@ public class PlannerQuickAdd : Gtk.Application {
             background-color: alpha (#3689e6, 0.25);
             border-radius: 4px;
             border: 1px solid alpha (#3689e6, 0.45);
+        }
+
+        .fake-window {
+            background: @theme_bg_color;
+            border-radius: 4px;
+            box-shadow:
+              0 0 0 1px @decoration_border_color,
+              0 14px 28px alpha(black, 0.35),
+              0 10px 10px alpha(black, 0.22);
+        }
+
+        .priority-4 check {
+            border-radius: 4px;
+            border-color: #ff7066;
+            background: rgba (255, 112, 102, 0.1);
+        }
+        
+        .priority-3 check {
+            border-radius: 4px;
+            border-color: #ff9a14;
+            background: rgba (255, 154, 20, 0.1);
+        }
+        
+        .priority-2 check {
+            border-radius: 4px;
+            border-color: #5297ff;
+            background: rgba (82, 151, 255, 0.1);
+        }
+        
+        .priority-1 check {
+            border-radius: 4px;
+            border-color: @border_color;
+            background: transparent;
+        }
+
+        .overdue-label {
+            color: #fa1955;
+        }
+
+        .today {
+            color: #ffaa00;
+        }
+
+        .upcoming {
+            color: #692fc2;
+        }
+
+        .today-icon {
+            background-color: #ffaa00;
+            color: #ffffff;
+            border-radius: 4px;
+            padding: 2px;
+        }
+
+        .upcoming-icon {
+            background-color: #692fc2;
+            color: #fff;
+            border-radius: 4px;
+            padding: 2px;
+        }
+
+        .due-clear {
+            background-color: #333333;
+            color: #fff;
+            border-radius: 4px;
+            padding: 2px;
         }
     """;
 
@@ -108,19 +202,6 @@ public class PlannerQuickAdd : Gtk.Application {
             }
         });
 
-        // CSS provider
-        var provider = new Gtk.CssProvider ();
-
-        try {
-            provider.load_from_data (CSS, CSS.length);
-            Gtk.StyleContext.add_provider_for_screen (
-                Gdk.Screen.get_default (), provider,
-                Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
-            );
-        } catch (Error e) {
-            debug (e.message);
-        }
-
         // Default Icon Theme
         weak Gtk.IconTheme default_theme = Gtk.IconTheme.get_default ();
         default_theme.add_resource_path ("/com/github/alainm23/planner");
@@ -128,12 +209,43 @@ public class PlannerQuickAdd : Gtk.Application {
         // Set Theme and Icon
         Gtk.Settings.get_default ().set_property ("gtk-icon-theme-name", "elementary");
         Gtk.Settings.get_default ().set_property ("gtk-theme-name", "elementary");
+        
         // Dark Mode
-        // Gtk.Settings.get_default ().gtk_application_prefer_dark_theme = settings.get_boolean ("prefer-dark-style");
+        int appearance_mode = settings.get_enum ("appearance");
+        string base_color = "white";
+        if (appearance_mode == 0) {
+            base_color = "white";
+            Gtk.Settings.get_default ().gtk_application_prefer_dark_theme = false;
+        } else if (appearance_mode == 1) {
+            base_color = "#282828";
+            Gtk.Settings.get_default ().gtk_application_prefer_dark_theme = true;
+        } else if (appearance_mode == 2) {
+            base_color = "#15151B";
+            Gtk.Settings.get_default ().gtk_application_prefer_dark_theme = true;
+        } else if (appearance_mode == 3) {
+            base_color = "#353945";
+            Gtk.Settings.get_default ().gtk_application_prefer_dark_theme = true;
+        }
+
+        // CSS provider
+        var provider = new Gtk.CssProvider ();
+        try {
+            provider.load_from_data (CSS.printf (base_color), CSS.length);
+            Gtk.StyleContext.add_provider_for_screen (
+                Gdk.Screen.get_default (), provider,
+                Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
+            );
+        } catch (Error e) {
+            debug (e.message);
+        }
     }
 }
 
 public static int main (string[] args) {
+    GLib.Environment.set_variable ("GTK_CSD", "1", true);
+
+    Gtk.init (ref args);
+    
     var application = new PlannerQuickAdd ();
     return application.run (args);
 }
