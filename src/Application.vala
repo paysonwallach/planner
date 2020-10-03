@@ -158,10 +158,6 @@ public class Planner : Gtk.Application {
 
         utils.apply_theme_changed ();
 
-        // Set Theme and Icon
-        Gtk.Settings.get_default ().set_property ("gtk-icon-theme-name", "elementary");
-        Gtk.Settings.get_default ().set_property ("gtk-theme-name", "elementary");
-
         // Path Theme
         //  if (utils.is_flatpak ()) {
         //      string CSS = """

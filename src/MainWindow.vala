@@ -69,17 +69,13 @@ public class MainWindow : Gtk.Window {
         sidebar_header.has_subtitle = false;
         sidebar_header.show_close_button = true;
         sidebar_header.custom_title = header_revealer;
-        sidebar_header.get_style_context ().add_class ("sidebar-header");
         sidebar_header.get_style_context ().add_class ("titlebar");
-        sidebar_header.get_style_context ().add_class ("default-decoration");
         sidebar_header.get_style_context ().add_class (Gtk.STYLE_CLASS_FLAT);
 
         projectview_header = new Gtk.HeaderBar ();
         projectview_header.has_subtitle = false;
         projectview_header.show_close_button = true;
-        projectview_header.get_style_context ().add_class ("projectview-header");
         projectview_header.get_style_context ().add_class ("titlebar");
-        projectview_header.get_style_context ().add_class ("default-decoration");
         projectview_header.get_style_context ().add_class (Gtk.STYLE_CLASS_FLAT);
 
         check_button_layout ();

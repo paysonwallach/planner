@@ -90,32 +90,6 @@ menu {
     background-color: @popover_background;
 }
 
-.sidebar-header {
-    padding-left: 1px;
-    background-color: @pane_color;
-}
-
-.sidebar-header:dir(ltr) {
-    border-top-right-radius: 0;
-}
-
-.sidebar-header:dir(rtl) {
-    border-top-left-radius: 0;
-}
-
-.projectview-header {
-    /* padding-right: 3px; */
-    background-color: @projectview_color;
-}
-
-.projectview-header:dir(ltr) {
-    border-top-left-radius: 0;
-}
-
-.projectview-header:dir(rtl) {
-    border-top-right-radius: 0;
-}
-
 paned {
     background-color: @projectview_color;
     border-bottom-left-radius: 4px;
