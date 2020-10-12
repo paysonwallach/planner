@@ -46,7 +46,20 @@
     <binary>com.github.alainm23.planner</binary>
   </provides>
   ​<releases>
-    <release version="2.5.2" date="2020-10-09">
+    <release version="2.5.4" date="2020-10-12">
+      <description>
+        <p>Bug fixes and performance improvement</p>
+        <ul>
+          <li>New Quick Find button position.</li>
+          <li>Github #565 - Fixing error when displaying the project name.</li>
+          <li>Github #563 - Fixing error when moving a task to the end of the list.</li>
+          <li>Github #559 #415 - Enabled click to see full details of a completed task.</li>
+          <li>Updated translations</li>
+        </ul>
+      </description>
+    </release>
+
+    <release version="2.5.3" date="2020-10-07">
       <description>
         <p>Bug fixes and performance improvement</p>
         <ul>
@@ -55,6 +68,7 @@
         </ul>
       </description>
     </release>
+
     <release version="2.5.1" date="2020-10-02">
       <description>
         <p>Planner 2.5 is here, with many design improvements, new features, and more.</p>

@@ -39,10 +39,18 @@ public class Widgets.TaskRow : Gtk.ListBoxRow {
     private Gtk.Revealer main_revealer;
     private Gtk.Grid main_grid;
     private Gtk.Grid handle_grid;
+    private Gtk.Menu menu = null;
+    private Gtk.Image menu_image;
+    private Gtk.ToggleButton reschedule_button;
+    private Gtk.Image due_image;
+    private Gtk.Label due_label;
+    private Gtk.Label time_label;
+    private Gtk.Revealer time_revealer;
+    private Gtk.Popover reschedule_popover = null;
 
     private uint timeout_id = 0;
     private bool receive_updates = true;
-
+    
     public bool reveal_child {
         set {
             if (value) {
@@ -60,10 +68,7 @@ public class Widgets.TaskRow : Gtk.ListBoxRow {
             source: source
         );
     }
-
-    public signal void task_changed (ECal.Component task);
-    public signal void task_completed (ECal.Component task);
-
+    
     construct {
         can_focus = false;
         get_style_context ().add_class ("item-row");
@@ -163,8 +168,39 @@ public class Widgets.TaskRow : Gtk.ListBoxRow {
         note_stack.add_named (note_eventbox, "label");
         note_stack.add_named (note_textview, "textview");
 
+        menu_image = new Gtk.Image ();
+        menu_image.gicon = new ThemedIcon ("view-more-symbolic");
+        menu_image.pixel_size = 16;
+
+        var menu_button = new Gtk.Button ();
+        menu_button.image = menu_image;
+        menu_button.valign = Gtk.Align.CENTER;
+        menu_button.can_focus = false;
+        menu_button.tooltip_text = _("Task Menu");
+        menu_button.get_style_context ().add_class ("item-action-button");
+        menu_button.get_style_context ().add_class (Gtk.STYLE_CLASS_FLAT);
+
+        reschedule_button = new Gtk.ToggleButton ();
+        reschedule_button.get_style_context ().add_class ("flat");
+        reschedule_button.halign = Gtk.Align.START;
+        reschedule_button.add (get_schedule_grid ());
+
+        var action_box = new Gtk.Box (Gtk.Orientation.HORIZONTAL, 0);
+        action_box.margin_top = 3;
+        action_box.margin_start = 20;
+        action_box.margin_bottom = 6;
+        action_box.margin_end = 3;
+        action_box.pack_start (reschedule_button, false, true, 0);
+        // action_box.pack_start (labels_edit_box, false, true, 0);
+        action_box.pack_end (menu_button, false, false, 0);
+        // action_box.pack_end (reminder_button, false, true, 0);
+        // action_box.pack_end (priority_button, false, false, 0);
+        // action_box.pack_end (label_button, false, true, 0);
+        // action_box.pack_end (checklist_button, false, true, 0);
+
         var bottom_box = new Gtk.Box (Gtk.Orientation.VERTICAL, 0);
         bottom_box.pack_start (note_stack, false, true, 0);
+        bottom_box.pack_end (action_box, false, true, 0);
 
         bottom_revealer = new Gtk.Revealer ();
         bottom_revealer.valign = Gtk.Align.START;
@@ -252,7 +288,169 @@ public class Widgets.TaskRow : Gtk.ListBoxRow {
             if (task == null) {
                 return;
             }
-            task_completed (task);
+            Planner.task_store.complete_task (source, task);
+        });
+
+        button_press_event.connect ((sender, evt) => {
+            if (evt.type == Gdk.EventType.BUTTON_PRESS && evt.button == 3) {
+                if (bottom_revealer.reveal_child == false) {
+                    activate_menu ();
+                }
+
+                return true;
+            }
+
+            return false;
+        });
+
+        menu_button.clicked.connect (() => {
+            activate_menu (false);
+        });
+
+        reschedule_button.toggled.connect (() => {
+            if (reschedule_button.active) {
+                if (reschedule_popover == null) {
+                    create_reschedule_popover ();
+                }
+
+                //  undated_button.visible = false;
+                //  undated_button.no_show_all = true;
+                //  if (due_date != "") {
+                //      undated_button.visible = true;
+                //      undated_button.no_show_all = false;
+                //  }
+                
+                reschedule_popover.show_all ();
+                reschedule_popover.popup ();
+            }
+        });
+
+        Planner.event_bus.show_undo_task.connect ((uid, type) => {
+            if (task.get_icalcomponent ().get_uid () == uid) {
+                main_revealer.reveal_child = true;
+            }
+        });
+    }
+
+    private void activate_menu (bool visible=true) {
+        if (menu == null) {
+            build_context_menu ();
+        }
+
+        handle_grid.get_style_context ().add_class ("highlight");
+        menu.popup_at_pointer (null);
+    }
+
+    private void build_context_menu () {
+        menu = new Gtk.Menu ();
+        menu.width_request = 235;
+
+        menu.hide.connect (() => {
+            handle_grid.get_style_context ().remove_class ("highlight");
+        });
+
+        var complete_menu = new Widgets.ImageMenuItem (_("Complete"), "emblem-default-symbolic");
+        var edit_menu = new Widgets.ImageMenuItem (_("Edit"), "edit-symbolic");
+
+        var today_menu = new Widgets.ImageMenuItem (_("Today"), "help-about-symbolic");
+        today_menu.item_image.get_style_context ().add_class ("today-icon");
+        today_menu.item_image.pixel_size = 14;
+
+        var tomorrow_menu = new Widgets.ImageMenuItem (_("Tomorrow"), "x-office-calendar-symbolic");
+        tomorrow_menu.item_image.get_style_context ().add_class ("upcoming-icon");
+        tomorrow_menu.item_image.pixel_size = 14;
+
+        var undated_menu = new Widgets.ImageMenuItem (_("Undated"), "window-close-symbolic");
+        undated_menu.item_image.get_style_context ().add_class ("due-clear");
+        undated_menu.item_image.pixel_size = 14;
+
+        var date_separator = new Gtk.SeparatorMenuItem ();
+
+        var share_menu = new Widgets.ImageMenuItem (_("Share"), "emblem-shared-symbolic");
+        var share_list_menu = new Gtk.Menu ();
+        share_menu.set_submenu (share_list_menu);
+
+        var share_text_menu = new Widgets.ImageMenuItem (_("Text"), "text-x-generic-symbolic");
+        var share_markdown_menu = new Widgets.ImageMenuItem (_("Markdown"), "planner-markdown-symbolic");
+
+        share_list_menu.add (share_text_menu);
+        share_list_menu.add (share_markdown_menu);
+        share_list_menu.show_all ();
+
+        var duplicate_menu = new Widgets.ImageMenuItem (_("Duplicate"), "edit-copy-symbolic");
+        var delete_menu = new Widgets.ImageMenuItem (_("Delete"), "user-trash-symbolic");
+        delete_menu.get_style_context ().add_class ("menu-danger");
+
+        menu.add (complete_menu);
+        menu.add (edit_menu);
+        menu.add (new Gtk.SeparatorMenuItem ());
+        menu.add (today_menu);
+        menu.add (tomorrow_menu);
+        menu.add (undated_menu);
+        menu.add (date_separator);
+        menu.add (share_menu);
+        menu.add (duplicate_menu);
+        menu.add (new Gtk.SeparatorMenuItem ());
+        menu.add (delete_menu);
+
+        menu.show_all ();
+
+        complete_menu.activate.connect (() => {
+            // checked_button.active = !checked_button.active;
+        });
+
+        edit_menu.activate.connect (() => {
+            // show_item ();
+        });
+
+        today_menu.activate.connect (() => {
+            //  due_button.set_due (
+            //      Planner.utils.get_format_date (
+            //          new GLib.DateTime.now_local ()
+            //      ).to_string ()
+            //  );
+        });
+
+        tomorrow_menu.activate.connect (() => {
+            //  due_button.set_due (
+            //      Planner.utils.get_format_date (
+            //          new GLib.DateTime.now_local ().add_days (1)
+            //      ).to_string ()
+            //  );
+        });
+
+        undated_menu.activate.connect (() => {
+            // due_button.set_due ("");
+        });
+
+        share_text_menu.activate.connect (() => {
+            // item.share_text ();
+        });
+
+        share_markdown_menu.activate.connect (() => {
+            // item.share_markdown ();
+        });
+
+        duplicate_menu.activate.connect (() => {
+            // item.get_duplicate ();
+        });
+
+        delete_menu.activate.connect (() => {
+            Planner.task_store.remove_task (source, task, ECal.ObjModType.ALL);
+            hide_destroy ();
+            //  Planner.notifications.send_undo_notification (
+            //      _("Task deleted"),
+            //      Planner.utils.build_undo_object ("item_delete", "task", task.get_icalcomponent ().get_uid (), "", "")
+            //  );
+            //  main_revealer.reveal_child = false;
+        });
+    }
+
+    public void hide_destroy () {
+        main_revealer.reveal_child = false;
+        Timeout.add (main_revealer.transition_duration, () => {
+            destroy ();
+            return GLib.Source.REMOVE;
         });
     }
 
@@ -272,13 +470,6 @@ public class Widgets.TaskRow : Gtk.ListBoxRow {
     private void save_task (ECal.Component task) {
         unowned ICal.Component ical_task = task.get_icalcomponent ();
 
-        //  if (due_switch.active) {
-        //      ical_task.set_due (Util.date_time_to_ical (due_datepicker.date, due_timepicker.time));
-        //      ical_task.set_due (Util.date_time_to_ical (due_datepicker.date, due_timepicker.time));
-        //  } else {
-        //      ical_task.set_due (new ICal.Time.null_time ());
-        //  }
-
         // Clear the old description
         int count = ical_task.count_properties (ICal.PropertyKind.DESCRIPTION_PROPERTY);
         for (int i = 0; i < count; i++) {
@@ -296,7 +487,7 @@ public class Widgets.TaskRow : Gtk.ListBoxRow {
         }
 
         task.get_icalcomponent ().set_summary (content_entry.text);
-        task_changed (task);
+        Planner.task_store.update_task (source, task, ECal.ObjModType.THIS_AND_FUTURE);
     }
 
     public void hide_item () {
@@ -367,13 +558,13 @@ public class Widgets.TaskRow : Gtk.ListBoxRow {
         if (receive_updates) {
             unowned ICal.Component ical_task = task.get_icalcomponent ();
 
-            int priority;
-            task.get_priority (out priority);
-            print ("%s\n".printf (priority.to_string ()));
-
+            checked_button.get_style_context ().remove_class ("checklist-completed");
             completed = ical_task.get_status () == ICal.PropertyStatus.COMPLETED;
             checked_button.active = completed;
-
+            if (completed) {
+                checked_button.get_style_context ().add_class ("checklist-completed");
+            }
+            
             content_label.label = Planner.utils.get_markup_format (
                 ical_task.get_summary () == null ? "" : ical_task.get_summary ()
             );
@@ -392,5 +583,165 @@ public class Widgets.TaskRow : Gtk.ListBoxRow {
                 return false;
             });
         }
+    }
+
+    private Gtk.Widget get_schedule_grid () {
+        due_image = new Gtk.Image ();
+        due_image.gicon = new ThemedIcon ("office-calendar-symbolic");
+        due_image.valign = Gtk.Align.CENTER;
+        due_image.pixel_size = 16;
+
+        due_label = new Gtk.Label (_("Schedule"));
+        due_label.use_markup = true;
+
+        time_label = new Gtk.Label (null);
+        time_label.use_markup = true;
+
+        time_revealer = new Gtk.Revealer ();
+        time_revealer.transition_type = Gtk.RevealerTransitionType.SLIDE_LEFT;
+        time_revealer.add (time_label);
+        time_revealer.reveal_child = false;
+
+        var main_grid = new Gtk.Grid ();
+        main_grid.halign = Gtk.Align.CENTER;
+        main_grid.valign = Gtk.Align.CENTER;
+        main_grid.add (due_image);
+        main_grid.add (due_label);
+        main_grid.add (time_revealer);
+
+        return main_grid;
+    }
+
+    private void create_reschedule_popover () {
+        reschedule_popover = new Gtk.Popover (reschedule_button);
+        reschedule_popover.position = Gtk.PositionType.RIGHT;
+
+        var popover_grid = new Gtk.Grid ();
+        popover_grid.margin_top = 6;
+        popover_grid.width_request = 235;
+        popover_grid.margin_bottom = 12;
+        popover_grid.orientation = Gtk.Orientation.VERTICAL;
+        popover_grid.add (get_calendar_widget ());
+        popover_grid.show_all ();
+
+        reschedule_popover.add (popover_grid);
+
+        reschedule_popover.closed.connect (() => {
+            reschedule_button.active = false;
+        });
+    }
+
+    private Gtk.Widget get_calendar_widget () {
+        var today_button = new Widgets.ModelButton (_("Today"), "help-about-symbolic", "");
+        today_button.get_style_context ().add_class ("due-menuitem");
+        today_button.item_image.pixel_size = 14;
+        today_button.color = 0;
+        today_button.due_label = true;
+
+        var tomorrow_button = new Widgets.ModelButton (_("Tomorrow"), "x-office-calendar-symbolic", "");
+        tomorrow_button.get_style_context ().add_class ("due-menuitem");
+        tomorrow_button.item_image.pixel_size = 14;
+        tomorrow_button.color = 1;
+        tomorrow_button.due_label = true;
+
+        var undated_button = new Widgets.ModelButton (_("Undated"), "window-close-symbolic", "");
+        undated_button.get_style_context ().add_class ("due-menuitem");
+        undated_button.item_image.pixel_size = 14;
+        undated_button.color = 2;
+        undated_button.due_label = true;
+
+        var calendar = new Widgets.Calendar.Calendar (true);
+        calendar.hexpand = true;
+
+        var time_header = new Gtk.Label (_("Time"));
+        time_header.get_style_context ().add_class ("font-bold");
+
+        var time_switch = new Gtk.Switch ();
+        time_switch.get_style_context ().add_class ("active-switch");
+
+        var time_box = new Gtk.Box (Gtk.Orientation.HORIZONTAL, 0);
+        time_box.hexpand = true;
+        time_box.margin_start = 16;
+        time_box.margin_end = 16;
+        time_box.pack_start (time_header, false, false, 0);
+        time_box.pack_end (time_switch, false, false, 0);
+        
+        var time_picker = new Granite.Widgets.TimePicker ();
+        time_picker.margin_start = 16;
+        time_picker.margin_end = 16;
+        time_picker.margin_top = 6;
+
+        var time_picker_revealer = new Gtk.Revealer ();
+        time_picker_revealer.reveal_child = false;
+        time_picker_revealer.transition_type = Gtk.RevealerTransitionType.SLIDE_UP;
+        time_picker_revealer.add (time_picker);
+
+        var grid = new Gtk.Grid ();
+        grid.orientation = Gtk.Orientation.VERTICAL;
+        grid.add (today_button);
+        grid.add (tomorrow_button);
+        grid.add (undated_button);
+        grid.add (calendar);
+        grid.add (time_box);
+        grid.add (time_picker_revealer);
+        grid.show_all ();
+
+        today_button.clicked.connect (() => {
+            unowned ICal.Component ical_task = task.get_icalcomponent ();
+
+            if (time_switch.active) {
+                ical_task.set_due (Planner.utils.date_time_to_ical (new GLib.DateTime.now_local (), time_picker.time));
+            } else {
+                ical_task.set_due (Planner.utils.date_time_to_ical (new GLib.DateTime.now_local (), null));
+            }
+
+            Planner.task_store.update_task (source, task, ECal.ObjModType.THIS_AND_FUTURE);
+        });
+
+        tomorrow_button.clicked.connect (() => {
+            unowned ICal.Component ical_task = task.get_icalcomponent ();
+
+            if (time_switch.active) {
+                ical_task.set_due (Planner.utils.date_time_to_ical (new GLib.DateTime.now_local ().add_days (1), time_picker.time));
+            } else {
+                ical_task.set_due (Planner.utils.date_time_to_ical (new GLib.DateTime.now_local ().add_days (1), null));
+            }
+
+            Planner.task_store.update_task (source, task, ECal.ObjModType.THIS_AND_FUTURE);
+        });
+
+        undated_button.clicked.connect (() => {
+            unowned ICal.Component ical_task = task.get_icalcomponent ();
+            ical_task.set_due (new ICal.Time.null_time ());
+            Planner.task_store.update_task (source, task, ECal.ObjModType.THIS_AND_FUTURE);
+        });
+
+        calendar.selection_changed.connect ((date) => {
+            unowned ICal.Component ical_task = task.get_icalcomponent ();
+
+            if (time_switch.active) {
+                ical_task.set_due (Planner.utils.date_time_to_ical (date, time_picker.time));
+            } else {
+                ical_task.set_due (Planner.utils.date_time_to_ical (date, null));
+            }
+            
+            Planner.task_store.update_task (source, task, ECal.ObjModType.THIS_AND_FUTURE);
+        });
+        
+        time_switch.notify["active"].connect (() => {
+            time_picker_revealer.reveal_child = time_switch.active;
+
+            //  if (time_switch.active && due_date == "") {
+            //      due_date = new GLib.DateTime.now_local ().to_string ();
+            //  }
+
+            // update_due_date ();
+        });
+
+        time_picker.changed.connect (() => {
+            // update_due_date ();
+        });
+
+        return grid;
     }
 }

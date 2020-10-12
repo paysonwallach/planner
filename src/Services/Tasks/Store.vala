@@ -165,15 +165,18 @@ public class Services.Tasks.Store : Object {
         destroy_task_list_client (task_list, client);
     }
 
-    public void add_task (E.Source list, ECal.Component task) {
-        add_task_async.begin (list, task);
+    public void add_task (E.Source list, ECal.Component task, Widgets.NewItem new_task) {
+        add_task_async.begin (list, task, new_task);
     }
 
-    private async void add_task_async (E.Source list, ECal.Component task) {
+    private async void add_task_async (E.Source list, ECal.Component task, Widgets.NewItem new_task) {
         ECal.Client client;
         try {
             client = get_client (list);
         } catch (Error e) {
+            new_task.loading = false;
+
+            // Send Notification Error
             critical (e.message);
             return;
         }
@@ -191,7 +194,16 @@ public class Services.Tasks.Store : Object {
             if (uid != null) {
                 comp.set_uid (uid);
             }
+            
+            //  var row = new Widgets.NewItem.for_source (new_task.source, new_task.listbox);
+            //  new_task.listbox.add (row);
+            //  new_task.listbox.show_all ();
+
+            new_task.hide_destroy ();
         } catch (GLib.Error error) {
+            new_task.loading = false;
+
+            // Send Notification Error
             critical (error.message);
         }
     }
@@ -325,37 +337,44 @@ public class Services.Tasks.Store : Object {
     }
 
     private void update_icalcomponent (ECal.Client client, ICal.Component comp, ECal.ObjModType mod_type) {
-        try {
-#if E_CAL_2_0
-            client.modify_object_sync (comp, mod_type, ECal.OperationFlags.NONE, null);
-#else
-            client.modify_object_sync (comp, mod_type, null);
-#endif
-        } catch (Error e) {
-            warning (e.message);
-            return;
-        }
-
-        if (comp.get_uid () == null) {
-            return;
-        }
-
-        try {
-            SList<ECal.Component> ecal_tasks;
-            client.get_objects_for_uid_sync (comp.get_uid (), out ecal_tasks, null);
-
-#if E_CAL_2_0
-            var ical_tasks = new SList<ICal.Component> ();
-#else
-            var ical_tasks = new SList<unowned ICal.Component> ();
-#endif
-            foreach (unowned ECal.Component ecal_task in ecal_tasks) {
-                ical_tasks.append (ecal_task.get_icalcomponent ());
+        client.modify_object.begin (comp, mod_type, null, (obj, res) => {
+            try {
+                client.modify_object.end (res);
+            } catch (Error e) {
+                warning (e.message);
             }
+        });
+//          try {
+//  #if E_CAL_2_0
+//              client.modify_object_sync (comp, mod_type, ECal.OperationFlags.NONE, null);
+//  #else
+//              client.modify_object_sync (comp, mod_type, null);
+//  #endif
+//          } catch (Error e) {
+//              warning (e.message);
+//              return;
+//          }
 
-        } catch (Error e) {
-            warning (e.message);
-        }
+//          if (comp.get_uid () == null) {
+//              return;
+//          }
+
+//          try {
+//              SList<ECal.Component> ecal_tasks;
+//              client.get_objects_for_uid_sync (comp.get_uid (), out ecal_tasks, null);
+
+//  #if E_CAL_2_0
+//              var ical_tasks = new SList<ICal.Component> ();
+//  #else
+//              var ical_tasks = new SList<unowned ICal.Component> ();
+//  #endif
+//              foreach (unowned ECal.Component ecal_task in ecal_tasks) {
+//                  ical_tasks.append (ecal_task.get_icalcomponent ());
+//              }
+
+//          } catch (Error e) {
+//              warning (e.message);
+//          }
     }
 
     public void remove_task (E.Source list, ECal.Component task, ECal.ObjModType mod_type) {

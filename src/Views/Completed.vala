@@ -20,11 +20,12 @@
 */
 
 public class Views.Completed : Gtk.EventBox {
-    public Gee.HashMap <string, Widgets.ItemCompletedRow> items_loaded;
+    public Gee.HashMap <string, Widgets.ItemRow> items_loaded;
     private Gtk.ListBox listbox;
+    private Gtk.Stack view_stack;
 
     construct {
-        items_loaded = new Gee.HashMap <string, Widgets.ItemCompletedRow> ();
+        items_loaded = new Gee.HashMap <string, Widgets.ItemRow> ();
 
         var icon_image = new Gtk.Image ();
         icon_image.valign = Gtk.Align.CENTER;
@@ -70,11 +71,11 @@ public class Views.Completed : Gtk.EventBox {
         var placeholder_view = new Widgets.Placeholder (
             _("All clear"),
             _("No tasks in this filter at the moment."),
-            "tag-symbolic"
+            "emblem-default-symbolic"
         );
         placeholder_view.reveal_child = true;
 
-        var view_stack = new Gtk.Stack ();
+        view_stack = new Gtk.Stack ();
         view_stack.expand = true;
         view_stack.transition_type = Gtk.StackTransitionType.CROSSFADE;
         view_stack.add_named (box_scrolled, "listbox");
@@ -87,6 +88,13 @@ public class Views.Completed : Gtk.EventBox {
 
         add (main_box);
         show_all ();
+
+        listbox.row_activated.connect ((r) => {
+            var row = ((Widgets.ItemRow) r);
+
+            row.reveal_child = true;
+            Planner.event_bus.unselect_all ();
+        });
     }
 
     public void add_all_items () {
@@ -95,7 +103,7 @@ public class Views.Completed : Gtk.EventBox {
         }
 
         foreach (var item in Planner.database.get_all_completed_items ()) {
-            var row = new Widgets.ItemCompletedRow (item, "completed");
+            var row = new Widgets.ItemRow (item, "upcoming");
 
             items_loaded.set (item.id.to_string (), row);
 
@@ -103,18 +111,21 @@ public class Views.Completed : Gtk.EventBox {
             listbox.show_all ();
         }
 
-        //listbox.set_sort_func (sort_function);
-        //listbox.set_header_func (update_headers);
+        if (items_loaded.size > 0) {
+            view_stack.visible_child_name = "listbox";
+        } else {
+            view_stack.visible_child_name = "placeholder";
+        }
     }
 
     private void header_function (Gtk.ListBoxRow lbrow, Gtk.ListBoxRow? lbbefore) {
-        var row = (Widgets.ItemCompletedRow) lbrow;
+        var row = (Widgets.ItemRow) lbrow;
         if (row.item.date_completed == "") {
             return;
         }
 
         if (lbbefore != null) {
-            var before = (Widgets.ItemCompletedRow) lbbefore;
+            var before = (Widgets.ItemRow) lbbefore;
             var comp_before = Planner.utils.get_format_date_from_string (before.item.date_completed);
             if (comp_before.compare (Planner.utils.get_format_date_from_string (row.item.date_completed)) == 0) {
                 return;

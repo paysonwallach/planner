@@ -21,7 +21,9 @@
 
 public class MainWindow : Gtk.Window {
     public weak Planner app { get; construct; }
+
     public Gee.HashMap <string, bool> projects_loaded;
+    public Gee.HashMap <string, bool> tasklists_loaded;
 
     private Widgets.Pane pane;
     private Gtk.HeaderBar sidebar_header;
@@ -33,8 +35,7 @@ public class MainWindow : Gtk.Window {
     private Views.Completed completed_view = null;
     private Views.Label label_view = null;
     private Views.Priority priority_view = null;
-    // private Views.TaskList tasklist_view = null;
-
+    
     private Widgets.MultiSelectToolbar multiselect_toolbar;
     private Services.DBusServer dbus_server;
     public Services.ActionManager action_manager;
@@ -62,6 +63,7 @@ public class MainWindow : Gtk.Window {
         });
 
         projects_loaded = new Gee.HashMap <string, bool> ();
+        tasklists_loaded = new Gee.HashMap <string, bool> ();
 
         var header_revealer = new Gtk.Revealer ();
         header_revealer.transition_type = Gtk.RevealerTransitionType.SLIDE_LEFT;
@@ -120,13 +122,13 @@ public class MainWindow : Gtk.Window {
         slim_mode_button.get_style_context ().add_class ("dim-label");
         slim_mode_button.valign = Gtk.Align.CENTER;
 
-        var slim_mode_revealer = new Gtk.Revealer ();
-        slim_mode_revealer.valign = Gtk.Align.CENTER;
-        slim_mode_revealer.transition_type = Gtk.RevealerTransitionType.CROSSFADE;
-        slim_mode_revealer.add (slim_mode_button);
-        slim_mode_revealer.reveal_child = false;
+        //  var slim_mode_revealer = new Gtk.Revealer ();
+        //  slim_mode_revealer.valign = Gtk.Align.CENTER;
+        //  slim_mode_revealer.transition_type = Gtk.RevealerTransitionType.CROSSFADE;
+        //  slim_mode_revealer.add (slim_mode_button);
+        //  slim_mode_revealer.reveal_child = true;
 
-        sidebar_header.pack_end (slim_mode_revealer);
+        //  sidebar_header.pack_end (slim_mode_revealer);
         
         multiselect_toolbar = new Widgets.MultiSelectToolbar ();
 
@@ -183,7 +185,7 @@ public class MainWindow : Gtk.Window {
                         stack.add_named (project_view, "project-view-%s".printf (project_id.to_string ()));
                         stack.visible_child_name = "project-view-%s".printf (project_id.to_string ());
                     } else {
-                        go_view (0);
+                        go_view (1);
                     }
                 } else {
                     go_view (Planner.settings.get_int ("homepage-item"));
@@ -215,22 +217,6 @@ public class MainWindow : Gtk.Window {
             stack.visible_child_name = "welcome-view";
         });
 
-        //  slim_mode_handle.enter_notify_event.connect ((event) => {
-        //      slim_mode_revealer.reveal_child = true;
-
-        //      return true;
-        //  });
-
-        //  slim_mode_handle.leave_notify_event.connect ((event) => {
-        //      if (event.detail == Gdk.NotifyType.INFERIOR) {
-        //          return false;
-        //      }
-
-        //      slim_mode_revealer.reveal_child = false;
-
-        //      return true;
-        //  });
-
         welcome_view.activated.connect ((index) => {
             if (index == 0) {
                 // Save user name
@@ -258,7 +244,7 @@ public class MainWindow : Gtk.Window {
                 init_progress_controller ();
 
                 // Init Inbox Project
-                go_view (0);
+                go_view (1);
             } else if (index == 1) {
                 var todoist_oauth = new Dialogs.TodoistOAuth ();
                 todoist_oauth.show_all ();
@@ -291,7 +277,7 @@ public class MainWindow : Gtk.Window {
 
             // Create The New Inbox Project
             inbox_view = null;
-            go_view (0);
+            go_view (1);
 
             // Enable UI
             pane.sensitive_ui = true;
@@ -307,7 +293,7 @@ public class MainWindow : Gtk.Window {
                 stack.visible_child.destroy ();
                 stack.visible_child_name = "inbox-view";
 
-                pane.select_item (0);
+                pane.select_item (1);
             }
         });
 
@@ -396,7 +382,7 @@ public class MainWindow : Gtk.Window {
         Planner.event_bus.hide_new_window_project.connect ((project_id) => {
             var project = ((Views.Project) stack.visible_child).project;
             if (project.id == project_id) {
-                go_view (0);
+                go_view (1);
             }
         });
     }
@@ -481,7 +467,10 @@ public class MainWindow : Gtk.Window {
 
     public void go_view (int id) {
         if (id == 0) {
-            // print ("Inbox: %s\n".printf (Planner.settings.get_int64 ("inbox-project").to_string ()));
+            var dialog = new Dialogs.QuickFind ();
+            dialog.destroy.connect (Gtk.main_quit);
+            dialog.show_all ();
+        } else if (id == 1) {
             if (inbox_view == null) {
                 inbox_view = new Views.Inbox (
                     Planner.database.get_project_by_id (Planner.settings.get_int64 ("inbox-project"))
@@ -490,21 +479,21 @@ public class MainWindow : Gtk.Window {
             }
 
             stack.visible_child_name = "inbox-view";
-        } else if (id == 1) {
+        } else if (id == 2) {
             if (today_view == null) {
                 today_view = new Views.Today ();
                 stack.add_named (today_view, "today-view");
             }
 
             stack.visible_child_name = "today-view";
-        } else if (id == 2) {
+        } else if (id == 3) {
             if (upcoming_view == null) {
                 upcoming_view = new Views.Upcoming ();
                 stack.add_named (upcoming_view, "upcoming-view");
             }
 
             stack.visible_child_name = "upcoming-view";
-        } else if (id == 3) {
+        } else if (id == 4) {
             if (completed_view == null) {
                 completed_view = new Views.Completed ();
                 stack.add_named (completed_view, "completed-view");
@@ -528,6 +517,17 @@ public class MainWindow : Gtk.Window {
             stack.add_named (project_view, "project-view-%s".printf (project.id.to_string ()));
             stack.visible_child_name = "project-view-%s".printf (project.id.to_string ());
         }
+    }
+
+    public void go_tasklist (E.Source source) {
+        //  if (tasklists_loaded.has_key (source.uid)) {
+        //      stack.visible_child_name = "tasklist-%s".printf (source.uid);
+        //  } else {
+        //      tasklists_loaded.set (source.uid, true);
+        //      var tasklist_view = new Views.TaskList (source);
+        //      stack.add_named (tasklist_view, "tasklist-%s".printf (source.uid));
+        //      stack.visible_child_name = "tasklist-%s".printf (source.uid);
+        //  }
     }
 
     public void go_item (int64 item_id) {
@@ -554,16 +554,6 @@ public class MainWindow : Gtk.Window {
 
         priority_view.priority = priority;
         stack.visible_child_name = "priority-view";
-    }
-
-    public void go_tasklist (E.Source source) {
-        //  if (tasklist_view == null) {
-        //      tasklist_view = new Views.TaskList ();
-        //      stack.add_named (tasklist_view, "tasklist-view");
-        //  }
-
-        //  tasklist_view.source = source;
-        //  stack.visible_child_name = "tasklist-view";
     }
 
     private void init_badge_count () {
@@ -774,7 +764,7 @@ public class MainWindow : Gtk.Window {
                 Planner.todoist.add_item (item, -1, temp_id_mapping);
                 Planner.notifications.send_undo_notification (
                     _("Adding task from clipboard…"),
-                    Planner.utils.build_undo_object ("item_add_from_clipboard", "item", temp_id_mapping, "", "")
+                    Planner.utils.build_undo_object ("item_add_from_clipboard", "item", temp_id_mapping.to_string (), "", "")
                 );
             } else {
                 item.id = Planner.utils.generate_id ();
@@ -790,7 +780,7 @@ public class MainWindow : Gtk.Window {
                 Planner.todoist.add_item (item, -1, temp_id_mapping);
                 Planner.notifications.send_undo_notification (
                     _("Adding task from clipboard…"),
-                    Planner.utils.build_undo_object ("item_add_from_clipboard", "item", temp_id_mapping, "", "")
+                    Planner.utils.build_undo_object ("item_add_from_clipboard", "item", temp_id_mapping.to_string (), "", "")
                 );
             } else {
                 item.id = Planner.utils.generate_id ();
@@ -806,7 +796,7 @@ public class MainWindow : Gtk.Window {
                 Planner.todoist.add_item (item, -1, temp_id_mapping);
                 Planner.notifications.send_undo_notification (
                     _("Adding task from clipboard…"),
-                    Planner.utils.build_undo_object ("item_add_from_clipboard", "item", temp_id_mapping, "", "")
+                    Planner.utils.build_undo_object ("item_add_from_clipboard", "item", temp_id_mapping.to_string (), "", "")
                 );
             } else {
                 item.id = Planner.utils.generate_id ();
@@ -822,7 +812,7 @@ public class MainWindow : Gtk.Window {
                 Planner.todoist.add_item (item, -1, temp_id_mapping);
                 Planner.notifications.send_undo_notification (
                     _("Adding task from clipboard…"),
-                    Planner.utils.build_undo_object ("item_add_from_clipboard", "item", temp_id_mapping, "", "")
+                    Planner.utils.build_undo_object ("item_add_from_clipboard", "item", temp_id_mapping.to_string (), "", "")
                 );
             } else {
                 item.id = Planner.utils.generate_id ();
