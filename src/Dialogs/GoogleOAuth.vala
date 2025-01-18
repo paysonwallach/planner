@@ -1,5 +1,5 @@
 /*
-* Copyright © 2019 Alain M. (https://github.com/alainm23/planner)
+* Copyright © 2023 Alain M. (https://github.com/alainm23/planify)
 *
 * This program is free software; you can redistribute it and/or
 * modify it under the terms of the GNU General Public
@@ -44,18 +44,18 @@ public class Dialogs.GoogleOAuth : Adw.Window {
     }
 
     construct {
+        // vala-lint=naming-convention
         string authorizationUrl = AUTH_ENDPOINT + "?client_id=" + CLIENT_ID +
                                   "&redirect_uri=" + REDIRECT_URI +
                                   "&scope=" + SCOPE +
                                   "&prompt=consent" +
                                   "&access_type=offline" +
-                                  "&response_type=code";
+                                  "&response_type=code"; 
 
         var info_label = new Gtk.Label (_("Loading"));
 
-        var spinner = new Gtk.Spinner ();
+        var spinner = new Adw.Spinner ();
         spinner.add_css_class ("text-color");
-        spinner.start ();
 
         var container_grid = new Gtk.Box (Gtk.Orientation.HORIZONTAL, 6);
         container_grid.valign = Gtk.Align.CENTER;
@@ -69,20 +69,18 @@ public class Dialogs.GoogleOAuth : Adw.Window {
 
         webview.load_uri (authorizationUrl);
 
-        var sync_image = new Widgets.DynamicIcon () {
+        var sync_image = new Gtk.Image.from_icon_name ("planner-cloud") {
             valign = Gtk.Align.CENTER,
-            halign = Gtk.Align.CENTER
+            halign = Gtk.Align.CENTER,
+            pixel_size = 128
         };
-
-        sync_image.update_icon_name ("planner-cloud");
-        sync_image.size = 128;
 
         // Loading
         var progress_bar = new Gtk.ProgressBar () {
             margin_top = 6
         };
 
-        var sync_label = new Gtk.Label (_("Planner is sync your tasks, this may take a few minutes."));
+        var sync_label = new Gtk.Label (_("Planner is sync your tasks, this may take a few minutes"));
         sync_label.wrap = true;
         sync_label.justify = Gtk.Justification.CENTER;
         sync_label.margin_top = 12;
@@ -116,7 +114,7 @@ public class Dialogs.GoogleOAuth : Adw.Window {
         scrolled.child = stack;
 
         var header = new Adw.HeaderBar ();
-        header.add_css_class (Granite.STYLE_CLASS_FLAT);
+        header.add_css_class ("flat");
         header.title_widget = container_grid;
 
         var main_grid = new Gtk.Box (Gtk.Orientation.VERTICAL, 0);
@@ -129,22 +127,17 @@ public class Dialogs.GoogleOAuth : Adw.Window {
             var redirect_uri = webview.get_uri ();
             
             if (redirect_uri.has_prefix (REDIRECT_URI)) {
-                string authorization_code = extractAuthorizationCode(redirect_uri);
+                string authorization_code = extractAuthorizationCode (redirect_uri);
                 get_token (authorization_code);
-                spinner.stop ();
             }
 
             if (load_event == WebKit.LoadEvent.FINISHED) {
                 info_label.label = _("Please enter your credentials");
-                spinner.stop ();
-                spinner.hide ();
                 return;
             }
 
             if (load_event == WebKit.LoadEvent.STARTED) {
                 info_label.label = _("Loading");
-                spinner.start ();
-                spinner.show ();
                 return;
             }
 
@@ -175,14 +168,15 @@ public class Dialogs.GoogleOAuth : Adw.Window {
         });
     }
 
-    private string? extractAuthorizationCode(string uri) {
-        string[] query = uri.split("?");
+    // vala-lint=naming-convention
+    private string? extractAuthorizationCode (string uri) {
+        string[] query = uri.split ("?");
     
         if (query.length >= 2) {
-            string[] params = query[1].split("&");
+            string[] params = query[1].split ("&");
             
             foreach (string param in params) {
-                string[] keyValue = param.split("=");
+                string[] keyValue = param.split ("="); // vala-lint=naming-convention
                 
                 if (keyValue.length >= 2 && keyValue[0] == "code") {
                     return keyValue[1];

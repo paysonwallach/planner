@@ -1,5 +1,5 @@
 /*
-* Copyright © 2019 Alain M. (https://github.com/alainm23/planner)
+* Copyright © 2023 Alain M. (https://github.com/alainm23/planify)
 *
 * This program is free software; you can redistribute it and/or
 * modify it under the terms of the GNU General Public
@@ -19,7 +19,7 @@
 * Authored by: Alain M. <alainmh23@gmail.com>
 */
 
-public class Widgets.EventsList : Gtk.Grid {
+public class Widgets.EventsList : Adw.Bin {
     public GLib.DateTime start_date { get; construct; }
     public GLib.DateTime end_date { get; construct; }
 
@@ -97,22 +97,16 @@ public class Widgets.EventsList : Gtk.Grid {
         main_grid.attach (listbox_grid, 0, 0);
 
         main_revealer = new Gtk.Revealer () {
-            transition_type = Gtk.RevealerTransitionType.SLIDE_DOWN
+            transition_type = Gtk.RevealerTransitionType.SLIDE_DOWN,
+            reveal_child = Services.Settings.get_default ().settings.get_boolean ("calendar-enabled"),
+            child = main_grid
         };
-        main_revealer.child = main_grid;
         
-        attach (main_revealer, 0, 0);
+        child = main_revealer;
         add_events ();
-        
-        Timeout.add (main_revealer.transition_duration, () => {
-            main_revealer.reveal_child = Services.Settings.get_default ().settings.get_boolean ("calendar-enabled");
-            return GLib.Source.REMOVE;
-        });
 
-        Services.Settings.get_default ().settings.changed.connect ((key) => {
-            if (key == "calendar-enabled") {
-                main_revealer.reveal_child = Services.Settings.get_default ().settings.get_boolean ("calendar-enabled");
-            }
+        Services.Settings.get_default ().settings.changed["calendar-enabled"].connect (() => {
+            main_revealer.reveal_child = Services.Settings.get_default ().settings.get_boolean ("calendar-enabled");
         });
     }
 
@@ -154,6 +148,7 @@ public class Widgets.EventsList : Gtk.Grid {
             if (event_row != null) {
                 event_row.destroy ();
                 event_hashmap.unset (event_uid);
+                listbox.remove (event_row);
             }
         }
 

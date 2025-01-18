@@ -1,23 +1,23 @@
 /*
- * Copyright © 2019 Alain M. (https://github.com/alainm23/planner)
- *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public
- * License as published by the Free Software Foundation; either
- * version 3 of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * General Public License for more details.
- *
- * You should have received a copy of the GNU General Public
- * License along with this program; if not, write to the
- * Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
- * Boston, MA 02110-1301 USA
- *
- * Authored by: Alain M. <alainmh23@gmail.com>
- */
+* Copyright © 2023 Alain M. (https://github.com/alainm23/planify)
+*
+* This program is free software; you can redistribute it and/or
+* modify it under the terms of the GNU General Public
+* License as published by the Free Software Foundation; either
+* version 3 of the License, or (at your option) any later version.
+*
+* This program is distributed in the hope that it will be useful,
+* but WITHOUT ANY WARRANTY; without even the implied warranty of
+* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+* General Public License for more details.
+*
+* You should have received a copy of the GNU General Public
+* License along with this program; if not, write to the
+* Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
+* Boston, MA 02110-1301 USA
+*
+* Authored by: Alain M. <alainmh23@gmail.com>
+*/
 
 public class Widgets.EventRow : Gtk.ListBoxRow {
 	public unowned ICal.Component component { get; construct; }
@@ -35,11 +35,11 @@ public class Widgets.EventRow : Gtk.ListBoxRow {
 		Object (
 			component: component,
 			cal: (E.SourceCalendar?) source.get_extension (E.SOURCE_EXTENSION_CALENDAR)
-			);
+		);
 	}
 
 	construct {
-		add_css_class ("selectable-item");
+		add_css_class ("no-selectable");
 		add_css_class ("transition");
 
 		var dt_start = component.get_dtstart ();
@@ -64,20 +64,20 @@ public class Widgets.EventRow : Gtk.ListBoxRow {
 			is_allday = true;
 		}
 
-		color_grid = new Gtk.Grid ();
-		color_grid.width_request = 3;
-		color_grid.height_request = 12;
-		color_grid.valign = Gtk.Align.CENTER;
-		color_grid.halign = Gtk.Align.CENTER;
-		color_grid.add_css_class ("event-%s".printf (component.get_uid ()));
+		color_grid = new Gtk.Grid () {
+			width_request = 3,
+			height_request = 12,
+			valign = Gtk.Align.CENTER,
+			halign = Gtk.Align.CENTER,
+			css_classes = { "event-bar" }
+		};
 
 		time_label = new Gtk.Label (null) {
 			xalign = 0,
 			valign = Gtk.Align.CENTER,
-			width_chars = 7
+			width_chars = 7,
+			css_classes = { "dim-label", "caption" }
 		};
-		time_label.add_css_class (Granite.STYLE_CLASS_DIM_LABEL);
-		time_label.add_css_class (Granite.STYLE_CLASS_SMALL_LABEL);
 
 		var name_label = new Gtk.Label (component.get_summary ()) {
 			valign = Gtk.Align.CENTER,
@@ -85,9 +85,9 @@ public class Widgets.EventRow : Gtk.ListBoxRow {
 			wrap = true,
 			use_markup = true,
 			wrap_mode = Pango.WrapMode.WORD_CHAR,
-			margin_start = 3
+			margin_start = 3,
+			css_classes = { "caption" }
 		};
-		name_label.add_css_class (Granite.STYLE_CLASS_SMALL_LABEL);
 
 		var grid = new Gtk.Box (Gtk.Orientation.HORIZONTAL, 6) {
 			margin_top = 3,
@@ -101,52 +101,18 @@ public class Widgets.EventRow : Gtk.ListBoxRow {
 		grid.append (color_grid);
 		grid.append (name_label);
 
-		var main_revealer = new Gtk.Revealer () {
-			transition_type = Gtk.RevealerTransitionType.SLIDE_DOWN
-		};
-		main_revealer.child = grid;
-
-		child = main_revealer;
-
-		Timeout.add (main_revealer.transition_duration, () => {
-			main_revealer.reveal_child = true;
-			return GLib.Source.REMOVE;
-		});
-
-		set_color ();
-		cal.notify["color"].connect (set_color);
-
+		child = grid;
+		
+		update_color ();
+		cal.notify["color"].connect (update_color);
 		update_timelabel ();
 	}
 
 	private void update_timelabel () {
-		// var time_format = Granite.DateTime.get_default_time_format (true, false);
-		time_label.label = "%s".printf (
-			start_time.format ("%I:%M %p")
-			);
+		time_label.label = "%s".printf (start_time.format ("%I:%M %p"));
 	}
 
-	private void set_color () {
-		var color = cal.dup_color ();
-		string color_css = """
-            .event-%s {
-                background-color: %s;
-                border-radius: 1px;
-            }
-        """;
-
-		var provider = new Gtk.CssProvider ();
-
-		var colored_css = color_css.printf (
-			component.get_uid (),
-			color
-			);
-
-		provider.load_from_string (colored_css);
-
-		Gtk.StyleContext.add_provider_for_display (
-			Gdk.Display.get_default (), provider,
-			Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
-			);
+	private void update_color () {
+		Util.get_default ().set_widget_color (cal.dup_color (), color_grid);
 	}
 }

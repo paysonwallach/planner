@@ -1,12 +1,9 @@
 {
     "app-id" : "io.github.alainm23.planify.Devel",
     "runtime" : "org.gnome.Platform",
-    "runtime-version": "44",
+    "runtime-version" : "47",
     "sdk" : "org.gnome.Sdk",
-    "command" : "io.github.alainm23.planify",
-    "sdk-extensions" : [
-        "org.freedesktop.Sdk.Extension.vala"
-    ],
+    "command" : "io.github.alainm23.planify.Devel",
     "tags" : [
         "devel"
     ],
@@ -23,11 +20,6 @@
         "--own-name=io.github.alainm23.planify.quick-add",
         "--own-name=io.github.alainm23.planify"
     ],
-    "build-options" : {
-        "prepend-path" : "/usr/lib/sdk/vala/bin/",
-        "prepend-ld-library-path" : "/usr/lib/sdk/vala/lib",
-        "env" : {        }
-    },
     "cleanup" : [
         "/include",
         "/lib/pkgconfig",
@@ -41,34 +33,36 @@
     ],
     "modules" : [
         {
-            "name": "intltool",
-            "cleanup": [ "*" ],
-            "sources": [
+            "name" : "intltool",
+            "cleanup" : [
+                "*"
+            ],
+            "sources" : [
                 {
-                    "type": "archive",
-                    "url": "https://launchpad.net/intltool/trunk/0.51.0/+download/intltool-0.51.0.tar.gz",
-                    "sha256": "67c74d94196b153b774ab9f89b2fa6c6ba79352407037c8c14d5aeb334e959cd"
+                    "type" : "archive",
+                    "url" : "https://launchpad.net/intltool/trunk/0.51.0/+download/intltool-0.51.0.tar.gz",
+                    "sha256" : "67c74d94196b153b774ab9f89b2fa6c6ba79352407037c8c14d5aeb334e959cd"
                 }
             ]
         },
         {
-            "name": "granite",
-            "buildsystem": "meson",
-            "sources": [
+            "name" : "granite",
+            "buildsystem" : "meson",
+            "sources" : [
                 {
-                    "type": "git",
-                    "url": "https://github.com/elementary/granite.git",
-                    "tag": "7.2.0"
+                    "type" : "git",
+                    "url" : "https://github.com/elementary/granite.git",
+                    "tag" : "7.2.0"
                 }
             ]
         },
         {
-            "name": "libical",
-            "buildsystem": "cmake-ninja",
-            "cleanup": [
+            "name" : "libical",
+            "buildsystem" : "cmake-ninja",
+            "cleanup" : [
                 "/lib/cmake"
             ],
-            "config-opts": [
+            "config-opts" : [
                 "-DCMAKE_BUILD_TYPE=Release",
                 "-DCMAKE_INSTALL_LIBDIR=/app/lib",
                 "-DBUILD_SHARED_LIBS=ON",
@@ -78,28 +72,28 @@
                 "-DICAL_BUILD_DOCS=false",
                 "-DWITH_CXX_BINDINGS=false"
             ],
-            "sources": [
+            "sources" : [
                 {
-                    "type": "archive",
-                    "url": "https://github.com/libical/libical/releases/download/v3.0.16/libical-3.0.16.tar.gz",
-                    "sha256": "b44705dd71ca4538c86fb16248483ab4b48978524fb1da5097bd76aa2e0f0c33",
-                    "x-checker-data": {
-                        "type": "anitya",
-                        "project-id": 1637,
-                        "url-template": "https://github.com/libical/libical/releases/download/v$version/libical-$version.tar.gz"
+                    "type" : "archive",
+                    "url" : "https://github.com/libical/libical/releases/download/v3.0.17/libical-3.0.17.tar.gz",
+                    "sha256" : "bcda9a6db6870240328752854d1ea475af9bbc6356e6771018200e475e5f781b",
+                    "x-checker-data" : {
+                        "type" : "anitya",
+                        "project-id" : 1637,
+                        "url-template" : "https://github.com/libical/libical/releases/download/v$version/libical-$version.tar.gz"
                     }
                 }
             ]
         },
         {
-            "name": "evolution-data-server",
-            "buildsystem": "cmake-ninja",
-            "cleanup": [
+            "name" : "evolution-data-server",
+            "buildsystem" : "cmake-ninja",
+            "cleanup" : [
                 "/lib/evolution-data-server/*-backends",
                 "/libexec",
                 "/share/dbus-1/services"
             ],
-            "config-opts": [
+            "config-opts" : [
                 "-DCMAKE_BUILD_TYPE=Release",
                 "-DENABLE_FILE_LOCKING=fcntl",
                 "-DENABLE_DOT_LOCKING=OFF",
@@ -122,14 +116,14 @@
                 "-DENABLE_WEATHER=OFF",
                 "-DENABLE_OAUTH2_WEBKITGTK4=OFF"
             ],
-            "sources": [
+            "sources" : [
                 {
-                    "type": "archive",
-                    "url": "https://download.gnome.org/sources/evolution-data-server/3.48/evolution-data-server-3.48.1.tar.xz",
-                    "sha256": "5ce62c1e67f2789342a7f4a035b102f74e62ed85f60e81a5b7f3e04165404dff",
-                    "x-checker-data": {
-                        "type": "gnome",
-                        "name": "evolution-data-server"
+                    "type" : "archive",
+                    "url" : "https://download.gnome.org/sources/evolution-data-server/3.50/evolution-data-server-3.50.2.tar.xz",
+                    "sha256" : "5e66270388d50c14f3b1ae3fa0d2127b9fedce752acd393b5545281b01fc4970",
+                    "x-checker-data" : {
+                        "type" : "gnome",
+                        "name" : "evolution-data-server"
                     }
                 }
             ]
@@ -146,7 +140,17 @@
                 {
                     "type" : "git",
                     "url" : "https://github.com/flatpak/libportal.git",
-                    "tag": "0.6"
+                    "tag" : "0.6"
+                }
+            ]
+        },
+        {
+            "name" : "gxml",
+            "buildsystem" : "meson",
+            "sources" : [
+                {
+                    "type" : "git",
+                    "url" : "https://gitlab.gnome.org/GNOME/gxml.git"
                 }
             ]
         },
@@ -156,14 +160,19 @@
             "buildsystem" : "meson",
             "config-opts" : [
                 "-Dtracing=true",
-                "-Dprofile=development"
+                "-Dprofile=development",
+                "--libdir=lib"
             ],
             "sources" : [
                 {
-                    "type" : "git",
-                    "url" : "https://github.com/alainm23/planner.git"
+                    "type" : "dir",
+                    "path" : "../"
                 }
             ]
         }
-    ]
+    ],
+    "build-options" : {
+        "env" : {        }
+    }
 }
+

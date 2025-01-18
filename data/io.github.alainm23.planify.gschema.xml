@@ -11,9 +11,9 @@
         <value nick="Inbox" value="0" />
         <value nick="Today" value="1" />
         <value nick="Scheduled" value="2" />
-        <value nick="Pinboard" value="3" />
-        <value nick="Completed" value="4" />
-        <value nick="All Tasks" value="5" />
+        <value nick="Labels" value="3" />
+        <value nick="Pinboard" value="4" />
+        <value nick="Completed" value="5" />
     </enum>
 
     <enum id="io.github.alainm23.planify.appearance">
@@ -31,11 +31,21 @@
     <enum id="io.github.alainm23.planify.start-week">
         <value nick="Sunday" value="0" />
         <value nick="Monday" value="1" />
+        <value nick="Tuesday" value="2" />
+        <value nick="Wednesday" value="3" />
+        <value nick="Thursday" value="4" />
+        <value nick="Friday" value="5" />
+        <value nick="Saturday" value="6" />
+    </enum>
+
+    <enum id="io.github.alainm23.planify.caldav-type">
+        <value nick="Nextcloud" value="0" />
+        <value nick="Radicale" value="1" />
     </enum>
 
     <enum id="io.github.alainm23.planify.new-tasks-position">
         <value nick="Top" value="0" />
-        <value nick="Bottom" value="-1" />
+        <value nick="Bottom" value="1" />
     </enum>
 
     <enum id="io.github.alainm23.planify.clock-format">
@@ -43,14 +53,9 @@
         <value nick="12h" value="1" />
     </enum>
 
-    <enum id="io.github.alainm23.planify.default-inbox">
-        <value nick="local" value="0" />
-        <value nick="todoist" value="1" />
-    </enum>
-
     <enum id="io.github.alainm23.planify.projects-sort-by">
-        <value nick="Alphabetically" value="0" />
-        <value nick="Custom sort order" value="1" />
+        <value nick="Custom sort order" value="0" />
+        <value nick="Alphabetically" value="1" />
     </enum>
 
     <enum id="io.github.alainm23.planify.projects-ordered">
@@ -61,6 +66,16 @@
     <enum id="io.github.alainm23.planify.complete-task">
         <value nick="Instantly" value="0" />
         <value nick="Wait 2500 milliseconds" value="1" />
+    </enum>
+
+    <enum id="io.github.alainm23.planify.automatic-reminders">
+        <value nick="At due time" value="0" />
+        <value nick="10 minutes before" value="1" />
+        <value nick="30 minutes before" value="2" />
+        <value nick="45 minutes before" value="3" />
+        <value nick="1 hour before" value="4" />
+        <value nick="2 hour before" value="5" />
+        <value nick="3 hour before" value="6" />
     </enum>
 
     <schema path="/io/github/alainm23/planify/" id="io.github.alainm23.planify" gettext-domain="io.github.alainm23.planify">        
@@ -78,12 +93,6 @@
 
         <key name="clock-format" enum="io.github.alainm23.planify.clock-format">
             <default>"24h"</default>
-            <summary></summary>
-            <description></description>
-        </key>
-
-        <key name="default-inbox" enum="io.github.alainm23.planify.default-inbox">
-            <default>"local"</default>
             <summary></summary>
             <description></description>
         </key>
@@ -142,8 +151,8 @@
             <description>Whether the window was maximized on last run</description>
         </key>
 
-        <key name="quick-add-project-selected" type="x">
-            <default>0</default>
+        <key name="quick-add-project-selected" type="s">
+            <default>""</default>
             <summary></summary>
             <description></description>
         </key>
@@ -156,6 +165,12 @@
 
         <key name="quick-add-close-loses-focus" type="b">
             <default>true</default>
+            <summary></summary>
+            <description></description>
+        </key>
+
+        <key name="quick-add-create-more" type="b">
+            <default>false</default>
             <summary></summary>
             <description></description>
         </key>
@@ -184,16 +199,16 @@
             <description></description>
         </key>
 
+        <key name="scheduled-sort-order" type="i">
+            <default>0</default>
+            <summary></summary>
+            <description></description>
+        </key>
+
         <key name="underline-completed-tasks" type="b">
             <default>false</default>
             <summary>Underline completed tasks.</summary>
             <description>Underline completed tasks.</description>
-        </key>
-
-        <key name="inbox-project-id" type="s">
-            <default>""</default>
-            <summary>Inbox Project ID</summary>
-            <description>Inbox Project ID</description>
         </key>
 
         <key name="local-inbox-project-id" type="s">
@@ -280,12 +295,6 @@
             <description>Todoist user is premium</description>
         </key>
 
-        <key name="todoist-inbox-project-id" type="s">
-            <default>""</default>
-            <summary>Todoist Inbox Project ID</summary>
-            <description>Todoist Inbox Project ID</description>
-        </key>
-
         <key name="slim-mode" type="b">
             <default>true</default>
             <summary>Slim Mode</summary>
@@ -301,7 +310,7 @@
         <key name="version" type="s">
             <default>'3.0'</default>
             <summary>The currently installed version.</summary>
-            <description>The currently installed version of planit, updated only after the user launched the app. This is used to know when to trigger the Release Dialog.</description>
+            <description>The currently installed version of Planify, updated only after the user launched the app. This is used to know when to trigger the Release Dialog.</description>
         </key>
 
         <key name="calendar-enabled" type="b">
@@ -332,6 +341,120 @@
             <default>""</default>
             <summary>Google User Email</summary>
             <description>Google User Email</description>
+        </key>
+
+        <key name="views-order-visible" type="as">
+            <default>['inbox', 'today', 'scheduled', 'labels']</default>
+            <summary></summary>
+            <description></description>
+        </key>
+
+        <key name="show-tasks-count" type="b">
+            <default>true</default>
+            <summary>Show Taks Count</summary>
+            <description>Show Taks Count</description>
+        </key>
+
+        <key name="show-support-banner" type="b">
+            <default>true</default>
+            <summary>Show Taks Count</summary>
+            <description>Show Taks Count</description>
+        </key>
+
+        <key name="always-show-completed-subtasks" type="b">
+            <default>false</default>
+            <summary>Always Show Completed Sub-Tasks</summary>
+            <description>Always Show Completed Sub-Tasks</description>
+        </key>
+
+        <key name="task-complete-tone" type="b">
+            <default>true</default>
+            <summary>Play a sound when tasks are completed</summary>
+            <description>Play a sound when tasks are completed</description>
+        </key>
+
+        <key name="open-task-sidebar" type="b">
+            <default>false</default>
+            <summary>Open Task In Sidebar View</summary>
+            <description>Open Task In Sidebar View</description>
+        </key>
+
+        <key name="mobile-mode" type="b">
+            <default>false</default>
+            <summary>Mobile Mode</summary>
+            <description>Mobile Mode</description>
+        </key>
+
+        <key name="attention-at-one" type="b">
+            <default>false</default>
+            <summary>Mobile Mode</summary>
+            <description>Mobile Mode</description>
+        </key>
+
+        <key name="enable-markdown-formatting" type="b">
+            <default>true</default>
+            <summary>Enable Markdown Formatting</summary>
+            <description>Enable Markdown Formatting</description>
+        </key>
+
+        <key name="always-show-details-sidebar" type="b">
+            <default>false</default>
+            <summary>Always Show Details Sidebar</summary>
+            <description>Keep the details panel always visible for easier navigation between tasks, avoiding the need to constantly open and close the panel.</description>
+        </key>
+
+        <key name="caldav-server-url" type="s">
+            <default>""</default>
+            <summary>CalDAV Server URL</summary>
+            <description>CalDAV Server URL</description>
+        </key>
+
+        <key name="caldav-sync-server" type="b">
+            <default>true</default>
+            <summary>CalDAV Sync Server</summary>
+            <description>CalDAV Sync Server</description>
+        </key>
+
+        <key name="caldav-username" type="s">
+            <default>""</default>
+            <summary>CalDAV Username</summary>
+            <description>CalDAV Username</description>
+        </key>
+
+        <key name="caldav-user-email" type="s">
+            <default>""</default>
+            <summary>CalDAV User Email</summary>
+            <description>CalDAV User Email</description>
+        </key>
+
+        <key name="caldav-user-displayname" type="s">
+            <default>""</default>
+            <summary>CalDAV User Displayname</summary>
+            <description>CalDAV User Displayname</description>
+        </key>
+
+        <key name="caldav-last-sync" type="s">
+            <default>""</default>
+            <summary>CalDAV last sync</summary>
+            <description>CalDAV last sync</description>
+        </key>
+
+        <key name="caldav-type" enum="io.github.alainm23.planify.caldav-type">
+            <default>"Nextcloud"</default>
+            <summary>CalDAV backend type</summary>
+            <description>CalDAV backend type</description>
+        </key>
+
+        <key name="automatic-reminders-enabled" type="b">
+            <default>true</default>
+            <summary>Automatic Reminders Enabled.</summary>
+            <description>Automatic Reminders Enabled.</description>
+        </key>
+
+        <key name="automatic-reminders" enum="io.github.alainm23.planify.automatic-reminders">
+            <default>"At due time"</default>
+            <summary>Automatic Reminders</summary>
+            <description>Automatic Reminders</description>
         </key>
     </schema>
 </schemalist>

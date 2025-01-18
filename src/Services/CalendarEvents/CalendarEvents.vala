@@ -15,7 +15,7 @@
  *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
- public class Services.CalendarEvents : Object  {
+ public class Services.CalendarEvents : Object {
     /* The data_range is the range of dates for which this model is storing
     * data.
     *
@@ -55,7 +55,7 @@
     }
 
     public CalendarEvents (GLib.DateTime month_start) {
-        Object(
+        Object (
             month_start: month_start
         );
     }
@@ -171,7 +171,7 @@
         data_range = new CalendarEventsUtil.DateRange (data_range_first, data_range_last);
         num_weeks = data_range.to_list ().size / 7;
 
-        print (@"Date ranges: ($data_range_first <= $month_start < $month_end <= $data_range_last)");
+        debug (@"Date ranges: ($data_range_first <= $month_start < $month_end <= $data_range_last)");
     }
 
     private void load_source (E.Source source) {
@@ -236,12 +236,6 @@
     private void debug_component (E.Source source, ECal.Component component) {
         unowned ICal.Component comp = component.get_icalcomponent ();
         debug (@"Component ['$(comp.get_summary())', $(source.dup_display_name()), $(comp.get_uid()))]");
-    }
-
-    /* --- Signal Handlers ---// */
-    private void on_parameter_changed () {
-        compute_ranges ();
-        load_all_sources ();
     }
 
     private ECal.ClientView on_client_view_received (AsyncResult results, E.Source source, ECal.Client client) {

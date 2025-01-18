@@ -1,5 +1,5 @@
 /*
-* Copyright © 2019 Alain M. (https://github.com/alainm23/planner)
+* Copyright © 2023 Alain M. (https://github.com/alainm23/planify)
 *
 * This program is free software; you can redistribute it and/or
 * modify it under the terms of the GNU General Public
@@ -24,18 +24,19 @@ public class Layouts.ProjectRow : Gtk.ListBoxRow {
     public bool show_subprojects { get; construct; }
     public bool drag_n_drop { get; construct; }
     
-    private Widgets.CircularProgressBar circular_progress_bar;
-    private Gtk.Label emoji_label;
+    private Widgets.IconColorProject icon_project;
     private Gtk.Label name_label;
     private Gtk.Label count_label;
     private Gtk.Revealer count_revealer;
     private Gtk.Button arrow_button;
+    private Gtk.Revealer arrow_revealer;
     private Gtk.ListBox listbox;
-    public Gtk.Grid handle_grid;
+    private Adw.Bin handle_grid;
     private Gtk.Revealer listbox_revealer;
     private Gtk.Stack progress_emoji_stack;
     private Gtk.Label due_label;
     private Gtk.Stack menu_stack;
+    private Gtk.Revealer loading_revealer;
 
     public Gtk.Box main_content;
     public Gtk.Revealer main_revealer;
@@ -43,9 +44,11 @@ public class Layouts.ProjectRow : Gtk.ListBoxRow {
     private Gtk.Popover menu_popover = null;
     private Widgets.ContextMenu.MenuItem favorite_item;
 
-    public Gee.HashMap <string, Layouts.ProjectRow> subprojects_hashmap;
-    
-    public bool on_drag = false;
+    private Gtk.Grid motion_top_grid;
+    private Gtk.Revealer motion_top_revealer;
+
+    public Gee.HashMap <string, Layouts.ProjectRow> subprojects_hashmap = new Gee.HashMap <string, Layouts.ProjectRow> ();
+    private Gee.HashMap<ulong, GLib.Object> signal_map = new Gee.HashMap<ulong, GLib.Object> ();
 
     private bool has_subprojects {
         get {
@@ -63,142 +66,172 @@ public class Layouts.ProjectRow : Gtk.ListBoxRow {
         }
     }
 
+    public bool is_loading {
+        set {
+            loading_revealer.reveal_child = value;
+        }
+
+        get {
+            return loading_revealer.reveal_child;
+        }
+    }
+
     public ProjectRow (Objects.Project project, bool show_subprojects = true, bool drag_n_drop = true) {
         Object (
             project: project,
             show_subprojects: show_subprojects,
-            drag_n_drop: drag_n_drop,
-            focusable: false
+            drag_n_drop: drag_n_drop
         );
     }
 
+    ~ProjectRow () {
+        print ("Destroying Layouts.ProjectRow\n");
+    }
+
     construct {
-        add_css_class ("selectable-item");
-        add_css_class ("transition");
+        css_classes = { "row", "transition", "no-padding" };
 
-        subprojects_hashmap = new Gee.HashMap <string, Layouts.ProjectRow> ();
-
-        circular_progress_bar = new Widgets.CircularProgressBar (10);
-        circular_progress_bar.percentage = project.percentage;
-        circular_progress_bar.color = project.color;
-
-        emoji_label = new Gtk.Label (project.emoji) {
-            halign = Gtk.Align.CENTER
+        motion_top_grid = new Gtk.Grid () {
+            height_request = 27,
+            css_classes = { "drop-area", "drop-target" },
+            margin_bottom = 3
         };
 
-        progress_emoji_stack = new Gtk.Stack ();
-        progress_emoji_stack.add_named (circular_progress_bar, "progress");
-        progress_emoji_stack.add_named (emoji_label, "emoji");
+        motion_top_revealer = new Gtk.Revealer () {
+            transition_type = Gtk.RevealerTransitionType.SLIDE_DOWN,
+            child = motion_top_grid
+        };
 
-        name_label = new Gtk.Label (project.name);
-        name_label.valign = Gtk.Align.CENTER;
-        name_label.ellipsize = Pango.EllipsizeMode.END;
-        name_label.hexpand = true;
-        name_label.halign = Gtk.Align.START;
+        icon_project = new Widgets.IconColorProject (12) {
+            margin_top = 3,
+            margin_bottom = 3,
+            margin_start = 3,
+            margin_end = 3
+        };
 
-        count_label = new Gtk.Label (project.project_count.to_string ()) {
+        icon_project.project = project;
+
+        name_label = new Gtk.Label (project.name) {
+            valign = Gtk.Align.CENTER,
+            ellipsize = Pango.EllipsizeMode.END,
             hexpand = true,
-            halign = Gtk.Align.CENTER
+            halign = Gtk.Align.START,
         };
 
-        count_label.add_css_class (Granite.STYLE_CLASS_DIM_LABEL);
-        count_label.add_css_class (Granite.STYLE_CLASS_SMALL_LABEL);
+        count_label = new Gtk.Label (null) {
+            hexpand = true,
+            margin_end = 6,
+            halign = Gtk.Align.CENTER,
+            css_classes = { "caption", "dim-label" }
+        };
 
         count_revealer = new Gtk.Revealer () {
-            reveal_child = int.parse (count_label.label) > 0,
-            transition_type = Gtk.RevealerTransitionType.CROSSFADE
+            transition_type = Gtk.RevealerTransitionType.CROSSFADE,
+            child = count_label
         };
 
-        count_revealer.child = count_label;
+        arrow_button = new Gtk.Button () {
+            valign = Gtk.Align.CENTER,
+            halign = Gtk.Align.CENTER,
+            css_classes = { "flat", "transparent", "hidden-button", "no-padding", "dim-label" },
+            margin_start = 6,
+            child = new Gtk.Image.from_icon_name ("go-next-symbolic") {
+                pixel_size = 12
+            }
+        };
 
-        var chevron_right_image = new Widgets.DynamicIcon ();
-        chevron_right_image.size = 16;
-        chevron_right_image.update_icon_name ("chevron-right"); 
-
-        arrow_button = new Gtk.Button ();
-        arrow_button.valign = Gtk.Align.CENTER;
-        arrow_button.halign = Gtk.Align.CENTER;
-        arrow_button.can_focus = false;
-        arrow_button.child = chevron_right_image;
-        arrow_button.add_css_class (Granite.STYLE_CLASS_FLAT);
-        arrow_button.add_css_class ("transparent");
-        arrow_button.add_css_class ("hidden-button");
-        arrow_button.add_css_class ("no-padding");
+        arrow_revealer = new Gtk.Revealer () {
+            transition_type = Gtk.RevealerTransitionType.SLIDE_RIGHT,
+            child = arrow_button
+        };
 
         if (project.collapsed) {
             arrow_button.add_css_class ("opened");
         }
 
         menu_stack = new Gtk.Stack () {
-            transition_type = Gtk.StackTransitionType.CROSSFADE,
-            halign = Gtk.Align.END
+            transition_type = Gtk.StackTransitionType.CROSSFADE
         };
 
-        due_label = new Gtk.Label (null);
-        due_label.use_markup = true;
-        due_label.valign = Gtk.Align.CENTER;
-        due_label.halign = Gtk.Align.CENTER;
-        due_label.add_css_class ("pane-due-button");
-        due_label.add_css_class (Granite.STYLE_CLASS_SMALL_LABEL);
+        due_label = new Gtk.Label (null) {
+            use_markup = true,
+            valign = Gtk.Align.CENTER,
+            halign = Gtk.Align.CENTER,
+            css_classes = { "pane-due-button", "caption" }
+        };
 
-        if (project.due_date != "") {
-            menu_stack.add_named (due_label, "due_label");
-            menu_stack.add_named (count_revealer, "count_revealer");
-            menu_stack.add_named (arrow_button, "arrow_button");
-        } else {
-            menu_stack.add_named (count_revealer, "count_revealer");
-            menu_stack.add_named (arrow_button, "arrow_button");
-            menu_stack.add_named (due_label, "due_label");
-        }
+        menu_stack.add_named (due_label, "due_label");
+        menu_stack.add_named (count_revealer, "count_revealer");
+
+        var end_box = new Gtk.Box (Gtk.Orientation.HORIZONTAL, 0) {
+            hexpand = true,
+            halign = END
+        };
+        end_box.append (menu_stack);
+        end_box.append (arrow_revealer);
+
+        var loading_spinner = new Adw.Spinner () {
+            valign = Gtk.Align.CENTER,
+            halign = Gtk.Align.CENTER,
+            margin_end = 6
+        };
+
+        loading_revealer = new Gtk.Revealer () {
+            transition_type = Gtk.RevealerTransitionType.SLIDE_RIGHT,
+            child = loading_spinner
+        };
 
         var projectrow_box = new Gtk.Box (Gtk.Orientation.HORIZONTAL, 6) {
-            margin_start = 6,
+            margin_start = 3,
             margin_top = 3,
             margin_end = 3,
             margin_bottom = 3
         };
         
-        projectrow_box.append (progress_emoji_stack);
+        projectrow_box.append (icon_project);
         projectrow_box.append (name_label);
-        projectrow_box.append (menu_stack);
+        projectrow_box.append (end_box);
+        projectrow_box.append (loading_revealer);
 
-        handle_grid = new Gtk.Grid ();
-        handle_grid.add_css_class ("transition");
-        handle_grid.attach (projectrow_box, 0, 0);
+        handle_grid = new Adw.Bin () {
+            css_classes = { "transition", "selectable-item", "drop-target" },
+            child = projectrow_box
+        };
 
         listbox = new Gtk.ListBox () {
-            hexpand = true
+            hexpand = true,
+            css_classes = { "bg-transparent" }
         };
 
-        listbox.add_css_class ("bg-transparent");
-
-        var listbox_grid = new Gtk.Grid () {
+        var listbox_grid = new Adw.Bin () {
             margin_start = 12,
-            margin_top = 3
+            child = listbox
         };
-
-        listbox_grid.attach (listbox, 0, 0);
 
         listbox_revealer = new Gtk.Revealer () {
             transition_type = Gtk.RevealerTransitionType.SLIDE_DOWN,
-            reveal_child = project.collapsed
+            reveal_child = project.collapsed,
+            child = listbox_grid
         };
 
-        listbox_revealer.child = listbox_grid;
-
         main_content = new Gtk.Box (Gtk.Orientation.VERTICAL, 0);
-
         main_content.append (handle_grid);
         main_content.append (listbox_revealer);
 
+        var box = new Gtk.Box (Gtk.Orientation.VERTICAL, 0);
+        box.append (motion_top_revealer);
+        box.append (main_content);
+
         main_revealer = new Gtk.Revealer () {
-            transition_type = Gtk.RevealerTransitionType.SLIDE_DOWN
+            transition_type = Gtk.RevealerTransitionType.SLIDE_DOWN,
+            child = box
         };
-        main_revealer.child = main_content;
 
         child = main_revealer;
         update_request ();
-
+        update_count_label (project.project_count);
+        Services.Settings.get_default ().settings.bind ("show-tasks-count", count_revealer, "reveal_child", GLib.SettingsBindFlags.DEFAULT);
+        
         if (drag_n_drop) {
             build_drag_and_drop ();
         }
@@ -208,173 +241,400 @@ public class Layouts.ProjectRow : Gtk.ListBoxRow {
         }
         
         Timeout.add (main_revealer.transition_duration, () => {
-            if (project.icon_style == ProjectIconStyle.PROGRESS) {
-                progress_emoji_stack.visible_child_name = "progress";
-            } else {
-                progress_emoji_stack.visible_child_name = "emoji";
-            }
-            
+            progress_emoji_stack.visible_child_name = project.icon_style == ProjectIconStyle.PROGRESS ? "progress" : "emoji";            
             main_revealer.reveal_child = true;
-            
             return GLib.Source.REMOVE;
         });
 
         var select_gesture = new Gtk.GestureClick ();
-        select_gesture.set_button (1);
         handle_grid.add_controller (select_gesture);
+        signal_map[select_gesture.released.connect (() => {
+            Services.EventBus.get_default ().pane_selected (PaneType.PROJECT, project.id);
+        })] = select_gesture;
 
-        select_gesture.pressed.connect (() => {
-            Timeout.add (Constants.DRAG_TIMEOUT, () => {
-                if (!on_drag) {
-                    Services.EventBus.get_default ().pane_selected (PaneType.PROJECT, project.id_string);
-                }
+        signal_map[activate.connect (() => {
+            Services.EventBus.get_default ().pane_selected (PaneType.PROJECT, project.id);
+        })] = this;
 
-                return GLib.Source.REMOVE;
-            });
-        });
-
-        var menu_gesture = new Gtk.GestureClick ();
-        menu_gesture.set_button (3);
+        var menu_gesture = new Gtk.GestureClick () {
+            button = 3
+        };
         handle_grid.add_controller (menu_gesture);
-
-        menu_gesture.pressed.connect ((n_press, x, y) => {
+        signal_map[menu_gesture.pressed.connect ((n_press, x, y) => {
             build_context_menu (x, y);
-        });
+        })] = menu_gesture;
 
         var motion_gesture = new Gtk.EventControllerMotion ();
         handle_grid.add_controller (motion_gesture);
+        signal_map[motion_gesture.enter.connect (() => {
+            arrow_revealer.reveal_child = has_subprojects;
+        })] = motion_gesture;
 
-        motion_gesture.enter.connect (() => {
-            if (has_subprojects) {
-                menu_stack.visible_child_name = "arrow_button";
-            }
-        });
-
-        motion_gesture.leave.connect (() => {
+        signal_map[motion_gesture.leave.connect (() => {
             if (project.due_date == "") {
                 menu_stack.visible_child_name = "count_revealer";
             } else {
                 menu_stack.visible_child_name = "due_label";
             }
-        });
+        })] = motion_gesture;
 
         var arrow_gesture = new Gtk.GestureClick ();
-        arrow_gesture.set_button (1);
         arrow_button.add_controller (arrow_gesture);
-
-        arrow_gesture.pressed.connect (() => {
+        signal_map[arrow_gesture.pressed.connect (() => {
             arrow_gesture.set_state (Gtk.EventSequenceState.CLAIMED);
             listbox_revealer.reveal_child = !listbox_revealer.reveal_child;
             update_listbox_revealer ();
-            project.update ();
-        });
+            project.update_local ();
+        })] = arrow_gesture;
 
-        Services.EventBus.get_default ().pane_selected.connect ((pane_type, id) => {
-            if (pane_type == PaneType.PROJECT && project.id_string == id) {
-                handle_grid.add_css_class ("selectable-item-selected");
+        signal_map[Services.EventBus.get_default ().pane_selected.connect ((pane_type, id) => {
+            if (pane_type == PaneType.PROJECT && project.id == id) {
+                handle_grid.add_css_class ("selected");
             } else {
-                handle_grid.remove_css_class ("selectable-item-selected");
+                handle_grid.remove_css_class ("selected");
             }
-        });
+        })] = Services.EventBus.get_default ();
 
-        project.updated.connect (update_request);
-        project.deleted.connect (hide_destroy);
+        signal_map[project.updated.connect (update_request)] = project;
+        signal_map[project.deleted.connect (hide_destroy)] = project;
+        signal_map[project.archived.connect (hide_destroy)] = project;
 
-        project.project_count_updated.connect (() => {
-            count_label.label = project.project_count.to_string ();
-            circular_progress_bar.percentage = project.percentage;
-            count_revealer.reveal_child = int.parse (count_label.label) > 0;
-        });
+        signal_map[project.project_count_updated.connect (() => {
+            update_count_label (project.project_count);
+            icon_project.update_request ();
+        })] = project;
 
-        project.subproject_added.connect ((subproject) => {
+        signal_map[project.subproject_added.connect ((subproject) => {
             add_subproject (subproject);
-        });
+        })] = project;
 
-        Services.EventBus.get_default ().project_parent_changed.connect ((subproject, old_parent_id) => {
+        signal_map[Services.EventBus.get_default ().project_parent_changed.connect ((_project, old_parent_id, collapsed) => {
             if (old_parent_id == project.id) {
-                if (subprojects_hashmap.has_key (subproject.id_string)) {
-                    subprojects_hashmap [subproject.id_string].hide_destroy ();
-                    subprojects_hashmap.unset (subproject.id_string);
+                if (subprojects_hashmap.has_key (_project.id)) {
+                    subprojects_hashmap [_project.id].hide_destroy ();
+                    subprojects_hashmap.unset (_project.id);
                 }
             }
 
-            if (subproject.parent_id == project.id) {
-                add_subproject (subproject);
+            if (_project.parent_id == project.id) {
+                add_subproject (_project);
+
+                if (collapsed) {
+                    project.collapsed = true;
+                    arrow_button.add_css_class ("opened");
+                }
             }
+        })] = Services.EventBus.get_default ();
+
+        signal_map[Services.EventBus.get_default ().update_inserted_project_map.connect ((_row, old_parent_id) => {
+            var row = (Layouts.ProjectRow) _row;
+
+            if (old_parent_id == project.id) {
+                if (subprojects_hashmap.has_key (row.project.id)) {
+                    subprojects_hashmap.unset (row.project.id);
+                }
+            }
+        })] = Services.EventBus.get_default ();
+
+        signal_map[project.loading_change.connect (() => {
+            is_loading = project.loading;
+        })] = project;
+
+        signal_map[Services.EventBus.get_default ().drag_projects_end.connect ((source_id) => {
+            if (project.source_id == source_id) {
+                motion_top_revealer.reveal_child = false;
+            }
+        })] = Services.EventBus.get_default ();
+
+        destroy.connect (() => {
+            foreach (var entry in signal_map.entries) {
+                entry.value.disconnect (entry.key);
+            }
+
+            signal_map.clear ();
         });
     }
 
+    private void update_count_label (int count) {
+        count_label.label = count <= 0 ? "" : count.to_string ();
+    }
+
     private void build_drag_and_drop () {
+        // Motion Drop
+        build_drop_motion ();
+
+        // Drag Souyrce
+        build_drag_source ();
+
+        // Magic Button
+        var drop_magic_button_target = new Gtk.DropTarget (typeof (Widgets.MagicButton), Gdk.DragAction.MOVE);
+        handle_grid.add_controller (drop_magic_button_target);
+        signal_map[drop_magic_button_target.drop.connect ((value, x, y) => {
+            var dialog = new Dialogs.Project.new (project.source_id, false, project.id);
+            dialog.present (Planify._instance.main_window);
+            return true;
+        })] = drop_magic_button_target;
+
+        // Drop
+        build_drop_project_target ();
+        build_drop_item_target ();
+
+        // Drop Order
+        var drop_order_target = new Gtk.DropTarget (typeof (Layouts.ProjectRow), Gdk.DragAction.MOVE);
+        motion_top_grid.add_controller (drop_order_target);
+        signal_map[drop_order_target.drop.connect ((value, x, y) => {
+            var picked_widget = (Layouts.ProjectRow) value;
+            var target_widget = this;            
+
+            // fix #1131
+            Services.EventBus.get_default ().drag_projects_end (target_widget.project.source_id);
+
+            var picked_project = picked_widget.project;
+            var target_project = target_widget.project;
+    
+            if (picked_widget == target_widget || target_widget == null) {
+                return false;
+            }
+
+            var projects_sort = Services.Settings.get_default ().settings.get_enum ("projects-sort-by");
+            if (projects_sort != 0) {
+                Services.Settings.get_default ().settings.set_enum ("projects-sort-by", 0);
+                Services.EventBus.get_default ().send_toast (
+                    Util.get_default ().create_toast (_("Projects sort changed to 'Custom sort order'"))
+                );
+            }
+    
+            var source_list = (Gtk.ListBox) picked_widget.parent;
+            var target_list = (Gtk.ListBox) target_widget.parent;
+            
+            string old_parent_id = picked_project.parent_id;
+
+            if (picked_project.parent_id != target_project.parent_id) {
+                picked_project.parent_id = target_project.parent_id;
+
+                if (picked_project.source_type == SourceType.TODOIST) {
+                    Services.Todoist.get_default ().move_project_section.begin (picked_project, target_project.parent_id, (obj, res) => {
+                        if (Services.Todoist.get_default ().move_project_section.end (res).status) {
+                            Services.Store.instance ().update_project (picked_project);
+                            Services.EventBus.get_default ().update_inserted_project_map (picked_widget, old_parent_id);
+                        }
+                    });
+                } else {
+                    Services.Store.instance ().update_project (picked_project);
+                    Services.EventBus.get_default ().update_inserted_project_map (picked_widget, old_parent_id);
+                }
+            }
+
+            source_list.remove (picked_widget);
+            target_list.insert (picked_widget, target_widget.get_index ());
+            update_projects_child_order (target_list);
+
+            return true;
+        })] = drop_order_target;
+    }
+
+    private void build_drop_motion () {
+        var drop_motion_ctrl = new Gtk.DropControllerMotion ();
+        add_controller (drop_motion_ctrl);
+        signal_map[drop_motion_ctrl.enter.connect ((x, y) => {
+            var drop = drop_motion_ctrl.get_drop ();
+            GLib.Value value = Value (typeof (Gtk.Widget));
+
+            try {
+                drop.drag.content.get_value (ref value);
+
+                if (value.dup_object () is Layouts.ProjectRow) {
+                    var picked_widget = (Layouts.ProjectRow) value;
+                    if (picked_widget.project.source_id == project.source_id) {
+                        motion_top_revealer.reveal_child = drop_motion_ctrl.contains_pointer;
+                    }
+                }
+            } catch (Error e) {
+                debug (e.message);
+            }
+        })] = drop_motion_ctrl;
+
+        signal_map[drop_motion_ctrl.leave.connect (() => {
+            motion_top_revealer.reveal_child = false;
+        })] = drop_motion_ctrl;
+    }
+
+    private void build_drag_source () {
         var drag_source = new Gtk.DragSource ();
         drag_source.set_actions (Gdk.DragAction.MOVE);
-        
-        drag_source.prepare.connect ((source, x, y) => {
-            return new Gdk.ContentProvider.for_value (this);
-        });
+        handle_grid.add_controller (drag_source);
 
-        drag_source.drag_begin.connect ((source, drag) => {
+        signal_map[drag_source.prepare.connect ((source, x, y) => {
+            return new Gdk.ContentProvider.for_value (this);
+        })] = drag_source;
+
+        signal_map[drag_source.drag_begin.connect ((source, drag) => {
             var paintable = new Gtk.WidgetPaintable (handle_grid);
             source.set_icon (paintable, 0, 0);
             drag_begin ();
-        });
+        })] = drag_source;
         
-        drag_source.drag_end.connect ((source, drag, delete_data) => {
+        signal_map[drag_source.drag_cancel.connect ((source, drag, reason) => {
             drag_end ();
-        });
+            return true;
+        })] = drag_source;
 
-        drag_source.drag_cancel.connect ((source, drag, reason) => {
+        signal_map[drag_source.drag_end.connect ((source, drag, delete_data) => {
             drag_end ();
-            return false;
-        });
+        })] = drag_source;
+    }
 
-        add_controller (drag_source);
-
+    private void build_drop_project_target () {
         var drop_target = new Gtk.DropTarget (typeof (Layouts.ProjectRow), Gdk.DragAction.MOVE);
-        drop_target.preload = true;
+        handle_grid.add_controller (drop_target);
+        signal_map[drop_target.accept.connect ((drop) => {
+            GLib.Value value = Value (typeof (Gtk.Widget));
 
-        drop_target.drop.connect ((value, x, y) => {
-            if (Services.Settings.get_default ().settings.get_enum ("projects-sort-by") == 0) {
-                Services.EventBus.get_default ().send_notification (
-                    Util.get_default ().create_toast (_("Project list order changed to Custom Sort Order."))
-                );
+            try {
+                drop.drag.content.get_value (ref value);
+            } catch (Error e) {
+                debug (e.message);
             }
 
-            Services.Settings.get_default ().settings.set_enum ("projects-sort-by", 1);
+            if (value.dup_object () is Layouts.ProjectRow) {
+                var picked_widget = (Layouts.ProjectRow) value;
+                if (picked_widget.project.source_id == project.source_id) {
+                    return true;
+                }
+            }
 
+            return false;
+        })] = drop_target;
+
+        signal_map[drop_target.drop.connect ((value, x, y) => {
             var picked_widget = (Layouts.ProjectRow) value;
             var target_widget = this;
-            
-            Gtk.Allocation alloc;
-            target_widget.get_allocation (out alloc);
 
-            picked_widget.drag_end ();
-            target_widget.drag_end ();
+            // fix #1131
+            Services.EventBus.get_default ().drag_projects_end (target_widget.project.source_id);
+
+            var picked_project = picked_widget.project;
+            var target_project = target_widget.project;
 
             if (picked_widget == target_widget || target_widget == null) {
                 return false;
             }
 
-            var source_list = (Gtk.ListBox) picked_widget.parent;
-            var target_list = (Gtk.ListBox) target_widget.parent;
-            var position = 0;
-
-            source_list.remove (picked_widget);
+            string old_parent_id = picked_project.parent_id;
+            picked_project.parent_id = target_project.id;
             
-            if (target_widget.get_index () == 0) {
-                if (y > (alloc.height / 2)) {
-                    position = target_widget.get_index () + 1;
-                }
+            if (picked_project.source_type == SourceType.TODOIST) {
+                Services.Todoist.get_default ().move_project_section.begin (picked_project, target_project.id, (obj, res) => {
+                    if (Services.Todoist.get_default ().move_project_section.end (res).status) {
+                        Services.Store.instance ().update_project (picked_project);
+                        Services.EventBus.get_default ().project_parent_changed (picked_project, old_parent_id, true);
+                    }
+                });
             } else {
-                position = target_widget.get_index () + 1;
+                Services.Store.instance ().update_project (picked_project);
+                Services.EventBus.get_default ().project_parent_changed (picked_project, old_parent_id, true);
             }
 
-            target_list.insert (picked_widget, position);
-            update_projects_child_order (target_list);
+            return true;
+        })] = drop_target;
+    }
+
+    private void build_drop_item_target () {
+        var drop_row_target = new Gtk.DropTarget (typeof (Layouts.ItemRow), Gdk.DragAction.MOVE);
+        handle_grid.add_controller (drop_row_target);
+        signal_map[drop_row_target.accept.connect ((drop) => {
+            var target_widget = this;
+
+            if (target_widget.project.is_deck) {
+                return false;
+            }
+
+            GLib.Value value = Value (typeof (Gtk.Widget));
+
+            try {
+                drop.drag.content.get_value (ref value);
+            } catch (Error e) {
+                debug (e.message);
+            }
+
+            if (value.dup_object () is Layouts.ItemRow) {
+                var picked_widget = (Layouts.ItemRow) value;
+
+                if (picked_widget.item.project.is_inbox_project) {
+                    return true;
+                }
+
+                if (picked_widget.item.project.source_id == project.source_id) {
+                    return true;
+                }
+            }
+
+            return false;
+        })] = drop_row_target;
+
+        signal_map[drop_row_target.drop.connect ((value, x, y) => {
+            var picked_widget = (Layouts.ItemBoard) value;
+            var target_widget = this;
+
+            if (picked_widget.item.project.source_id != target_widget.project.source_id) {
+                Util.get_default ().move_backend_type_item.begin (picked_widget.item, target_widget.project);
+            } else {
+                picked_widget.item.move (target_widget.project, "");
+            }
 
             return true;
-        });
+        })] = drop_row_target;
 
-        add_controller (drop_target);
+        var drop_board_target = new Gtk.DropTarget (typeof (Layouts.ItemBoard), Gdk.DragAction.MOVE);
+        handle_grid.add_controller (drop_board_target);
+        signal_map[drop_board_target.accept.connect ((drop) => {
+            GLib.Value value = Value (typeof (Gtk.Widget));
+
+            try {
+                drop.drag.content.get_value (ref value);
+            } catch (Error e) {
+                debug (e.message);
+            }
+
+            if (value.dup_object () is Layouts.ItemBoard) {
+                var picked_widget = (Layouts.ItemBoard) value;
+                
+                if (picked_widget.item.project.is_inbox_project) {
+                    return true;
+                }
+                
+                if (picked_widget.item.project.source_id == project.source_id) {
+                    return true;
+                }
+            }
+
+            return false;
+        })] = drop_board_target;
+
+        signal_map[drop_board_target.drop.connect ((value, x, y) => {
+            var picked_widget = (Layouts.ItemBoard) value;
+            var target_widget = this;
+
+            if (picked_widget.item.project.source_id != target_widget.project.source_id) {
+                Util.get_default ().move_backend_type_item.begin (picked_widget.item, target_widget.project);
+            } else {
+                picked_widget.item.move (target_widget.project, "");
+            }
+
+            return true;
+        })] = drop_board_target;
+    }
+
+    public void drag_begin () {
+        handle_grid.add_css_class ("drop-begin");
+        main_revealer.reveal_child = false;
+        listbox_revealer.reveal_child = false;
+    }
+
+    public void drag_end () {
+        handle_grid.remove_css_class ("drop-begin");
+        main_revealer.reveal_child = true;
+        listbox_revealer.reveal_child = project.collapsed;
     }
 
     private void update_projects_child_order (Gtk.ListBox listbox) {
@@ -386,124 +646,108 @@ public class Layouts.ProjectRow : Gtk.ListBoxRow {
 
             if (project_row != null) {
                 project_row.project.child_order = row_index;
-                Services.Database.get_default ().update_project (project_row.project);
+                Services.Store.instance ().update_project (project_row.project);
             }
 
             row_index++;
         } while (project_row != null);
     }
-
-    public void drag_begin () {
-        handle_grid.add_css_class ("card");
-        on_drag = true;
-        opacity = 0.3;
-        listbox_revealer.reveal_child = false;
-    }
-
-    public void drag_end () {
-        handle_grid.remove_css_class ("card");
-        on_drag = false;
-        opacity = 1;
-        listbox_revealer.reveal_child = project.collapsed;
-    }
     
     private void build_context_menu (double x, double y) {
         if (menu_popover != null) {
-            favorite_item.title = project.is_favorite ? _("Remove from favorites") : _("Add to favorites");
-
-            menu_popover.pointing_to = { (int) x, (int) y, 1, 1 };
+            favorite_item.title = project.is_favorite ? _("Remove From Favorites") : _("Add to Favorites");
+            menu_popover.pointing_to = { ((int) x), (int) y, 1, 1 };
             menu_popover.popup ();
             return;
         }
         
-        favorite_item = new Widgets.ContextMenu.MenuItem (project.is_favorite ? _("Remove from favorites") : _("Add to favorites"), "planner-star");
-        var edit_item = new Widgets.ContextMenu.MenuItem (_("Edit Project"), "planner-edit");
-        // var move_item = new Widgets.ContextMenu.MenuItem (_("Move to project"), "chevron-right");
-        var delete_item = new Widgets.ContextMenu.MenuItem (_("Delete project"), "planner-trash");
+        favorite_item = new Widgets.ContextMenu.MenuItem (project.is_favorite ? _("Remove From Favorites") : _("Add to Favorites"), "star-outline-thick-symbolic");
+        var edit_item = new Widgets.ContextMenu.MenuItem (_("Edit Project"), "edit-symbolic");
+        var duplicate_item = new Widgets.ContextMenu.MenuItem (_("Duplicate"), "tabs-stack-symbolic");
+        var refresh_item = new Widgets.ContextMenu.MenuItem (_("Refresh"), "update-symbolic");
+
+        var archive_item = new Widgets.ContextMenu.MenuItem (_("Archive"), "shoe-box-symbolic");
+        var delete_item = new Widgets.ContextMenu.MenuItem (_("Delete Project"), "user-trash-symbolic");
         delete_item.add_css_class ("menu-item-danger");
 
-        var share_markdown_item = new Widgets.ContextMenu.MenuItem (_("Share"), "share");
-        var share_email_item = new Widgets.ContextMenu.MenuItem (_("Send by e-mail"), "planner-mail");
+        var share_markdown_item = new Widgets.ContextMenu.MenuItem (_("Share"), "share-alt-symbolic");
+        var share_email_item = new Widgets.ContextMenu.MenuItem (_("Send by E-Mail"), "mail-symbolic");
 
         var menu_box = new Gtk.Box (Gtk.Orientation.VERTICAL, 0);
         menu_box.margin_top = menu_box.margin_bottom = 3;
         menu_box.append (favorite_item);
-        menu_box.append (edit_item);
-        // menu_box.append (new Widgets.ContextMenu.MenuSeparator ());
-        // menu_box.append (move_item);
+
+        if (!project.is_deck && !project.inbox_project) {
+            menu_box.append (edit_item);
+        }
+
+        menu_box.append (duplicate_item);
         menu_box.append (new Widgets.ContextMenu.MenuSeparator ());
+
+        if (project.source_type == SourceType.CALDAV && !project.is_deck) {
+            menu_box.append (refresh_item);
+            menu_box.append (new Widgets.ContextMenu.MenuSeparator ());
+        }
+
         menu_box.append (share_markdown_item);
         menu_box.append (share_email_item);
 
-        if (project.id != Services.Settings.get_default ().settings.get_string ("todoist-inbox-project-id") &&
-        project.id != Services.Settings.get_default ().settings.get_string ("local-inbox-project-id")) {
+        if (!project.is_deck && !project.inbox_project) {
             menu_box.append (new Widgets.ContextMenu.MenuSeparator ());
+            menu_box.append (archive_item);
             menu_box.append (delete_item);
         }
 
         menu_popover = new Gtk.Popover () {
             has_arrow = false,
+            halign = Gtk.Align.START,
             child = menu_box,
-            position = Gtk.PositionType.RIGHT
+            width_request = 250
         };
 
         menu_popover.set_parent (this);
-        menu_popover.pointing_to = { (int) x, (int) y, 1, 1 };
-
-        menu_popover.popup();
+        menu_popover.pointing_to = { ((int) x), (int) y, 1, 1 };
+        menu_popover.popup ();
 
         favorite_item.clicked.connect (() => {
-            menu_popover.popdown ();
-
             project.is_favorite = !project.is_favorite;
-            Services.Database.get_default ().update_project (project);
+            Services.Store.instance ().update_project (project);
             Services.EventBus.get_default ().favorite_toggled (project);
-            project.update (true);
+            project.update ();
         });
 
         edit_item.clicked.connect (() => {
-            menu_popover.popdown ();
-
             var dialog = new Dialogs.Project (project);
-            dialog.show ();
+            dialog.present (Planify._instance.main_window);
+        });
+
+        refresh_item.clicked.connect (() => {
+            sync_project ();
         });
 
         delete_item.clicked.connect (() => {
-            menu_popover.popdown ();
-
-            var dialog = new Adw.MessageDialog ((Gtk.Window) Planify.instance.main_window, 
-            _("Delete project"), _("Are you sure you want to delete <b>%s</b>?").printf (Util.get_default ().get_dialog_text (project.short_name)));
-
-            dialog.body_use_markup = true;
-            dialog.add_response ("cancel", _("Cancel"));
-            dialog.add_response ("delete", _("Delete"));
-            dialog.set_response_appearance ("delete", Adw.ResponseAppearance.DESTRUCTIVE);
-            dialog.show ();
-
-            dialog.response.connect ((response) => {
-                if (response == "delete") {
-                    if (project.backend_type == BackendType.TODOIST) {
-                        Services.Todoist.get_default ().delete.begin (project, (obj, res) => {
-                            if (Services.Todoist.get_default ().delete.end (res)) {
-                                Services.Database.get_default ().delete_project (project);
-                            }
-                        });
-                    } else if (project.backend_type == BackendType.LOCAL) {
-                        Services.Database.get_default ().delete_project (project);
-                    }
-                }
-            });
+            project.delete_project ((Gtk.Window) Planify.instance.main_window);
         });
 
         share_markdown_item.clicked.connect (() => {
-            menu_popover.popdown ();
             project.share_markdown ();
         });
 
         share_email_item.clicked.connect (() => {
-            menu_popover.popdown ();
             project.share_mail ();
         });
+
+        duplicate_item.clicked.connect (() => {
+            Util.get_default ().duplicate_project.begin (project, project.parent_id);
+        });
+
+        archive_item.clicked.connect (() => {
+            project.archive_project ((Gtk.Window) Planify.instance.main_window);
+        });
+    }
+
+    private void sync_project () {
+        Services.CalDAV.Core.get_default ().sync_tasklist.begin (project);
     }
 
     private void update_listbox_revealer () {
@@ -517,30 +761,20 @@ public class Layouts.ProjectRow : Gtk.ListBoxRow {
     }
 
     public void update_request () {
-        if (project.icon_style == ProjectIconStyle.PROGRESS) {
-            progress_emoji_stack.visible_child_name = "progress";
-        } else {
-            progress_emoji_stack.visible_child_name = "emoji";
-        }
-        
-        circular_progress_bar.color = project.color;
-        emoji_label.label = project.emoji;
+        icon_project.update_request ();
         name_label.label = project.name;
-
         check_due_date ();
     }
 
     private void check_due_date () {
         if (project.due_date != "") {
-            var datetime = Util.get_default ().get_date_from_string (project.due_date);
-            due_label.label = Util.get_default ().get_relative_date_from_date (datetime);
+            var datetime = Utils.Datetime.get_date_from_string (project.due_date);
+            due_label.label = Utils.Datetime.days_left (datetime, true);
         }
 
         // Workaround to fix small bug when collapsing/expanding project - this causes save and would
         // hide currently hovered arrow
-        if (menu_stack.visible_child_name != "arrow_button") {
-            menu_stack.visible_child_name = project.due_date == "" ? "count_revealer" : "due_label";
-        }
+        menu_stack.visible_child_name = project.due_date == "" ? "count_revealer" : "due_label";
     }
 
     private void add_subprojects () {
@@ -558,9 +792,9 @@ public class Layouts.ProjectRow : Gtk.ListBoxRow {
     }
 
     public void add_subproject (Objects.Project project) {
-        if (!subprojects_hashmap.has_key (project.id_string) && show_subprojects) {
-            subprojects_hashmap [project.id_string] = new Layouts.ProjectRow (project);
-            listbox.append (subprojects_hashmap [project.id_string]);
+        if (!subprojects_hashmap.has_key (project.id) && show_subprojects) {
+            subprojects_hashmap [project.id] = new Layouts.ProjectRow (project);
+            listbox.append (subprojects_hashmap [project.id]);
         }
     }
 }

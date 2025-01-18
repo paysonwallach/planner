@@ -1,5 +1,5 @@
 /*
-* Copyright © 2019 Alain M. (https://github.com/alainm23/planner)
+* Copyright © 2023 Alain M. (https://github.com/alainm23/planify)
 *
 * This program is free software; you can redistribute it and/or
 * modify it under the terms of the GNU General Public
@@ -19,18 +19,15 @@
 * Authored by: Alain M. <alainmh23@gmail.com>
 */
 
-public class Dialogs.ProjectPicker.ProjectPicker : Adw.Window {
-    public BackendType backend_type { get; construct; }
+public class Dialogs.ProjectPicker.ProjectPicker : Adw.Dialog {
     public PickerType picker_type { get; construct; }
+    public Objects.Source? source { get; construct; }
+    public bool all_sources { get; construct; }
 
     private Gtk.SearchEntry search_entry;
     private Gtk.ListBox sections_listbox;
 
     private Layouts.HeaderItem inbox_group;
-    private Layouts.HeaderItem local_group;
-    private Layouts.HeaderItem todoist_group;
-
-    public Gee.HashMap <string, Dialogs.ProjectPicker.ProjectPickerRow> projects_hashmap;
 
     Objects.Project _project;
     public Objects.Project project {
@@ -63,25 +60,48 @@ public class Dialogs.ProjectPicker.ProjectPicker : Adw.Window {
 
     public signal void changed (string type, string id);
 
-    public ProjectPicker (PickerType picker_type = PickerType.PROJECTS, BackendType backend_type = BackendType.ALL) {
+    private Gee.HashMap<ulong, GLib.Object> signal_map = new Gee.HashMap<ulong, GLib.Object> ();
+
+    public ProjectPicker.for_project (Objects.Source source) {
         Object (
-            picker_type: picker_type,
-            backend_type: backend_type,
-            deletable: true,
-            resizable: true,
-            modal: true,
+            picker_type: PickerType.PROJECTS,
+            source: source,
+            all_sources: false,
             title: _("Move"),
-            width_request: 400,
-            height_request: 600,
-            transient_for: (Gtk.Window) Planify.instance.main_window
+            content_width: 400,
+            content_height: 550
         );
     }
 
-    construct {
-        projects_hashmap = new Gee.HashMap <string, Dialogs.ProjectPicker.ProjectPickerRow> ();
+    public ProjectPicker.for_projects () {
+        Object (
+            picker_type: PickerType.PROJECTS,
+            source: null,
+            all_sources: true,
+            title: _("Move"),
+            content_width: 400,
+            content_height: 550
+        );
+    }
 
+    public ProjectPicker.for_sections (Objects.Source source) {
+        Object (
+            picker_type: PickerType.SECTIONS,
+            source: source,
+            all_sources: false,
+            title: _("Move"),
+            content_width: 400,
+            content_height: 550
+        );
+    }
+
+    ~ProjectPicker () {
+        print ("Destroying Dialogs.ProjectPicker.ProjectPicker\n");
+    }
+
+    construct {
         var headerbar = new Adw.HeaderBar ();
-        headerbar.add_css_class (Granite.STYLE_CLASS_FLAT);
+        headerbar.add_css_class ("flat");
 
         search_entry = new Gtk.SearchEntry () {
             placeholder_text = _("Type a search"),
@@ -106,38 +126,34 @@ public class Dialogs.ProjectPicker.ProjectPicker : Adw.Window {
             margin_top = 12,
             margin_start = 12,
             margin_end = 12,
-            margin_bottom = 12
+            margin_bottom = 12,
+            css_classes = { "suggested-action" }
         };
-        submit_button.add_css_class (Granite.STYLE_CLASS_SUGGESTED_ACTION);
-
+        
         var content_box = new Gtk.Box (Gtk.Orientation.VERTICAL, 0);
         content_box.append (headerbar);
-        content_box.append (search_entry);
+        //  content_box.append (search_entry);
         content_box.append (main_stack);
         content_box.append (submit_button);
 
-        content = content_box;
-        add_projects ();
+        child = content_box;
+        Services.EventBus.get_default ().disconnect_typing_accel ();
 
-        Timeout.add (Constants.DRAG_TIMEOUT, () => {
-            // main_stack.visible_child_name = picker_type.to_string ();
-            return GLib.Source.REMOVE;
-        });
+        //  search_entry.search_changed.connect (() => {
+        //      local_group.invalidate_filter ();
+        //      todoist_group.invalidate_filter ();
+        //      caldav_group.invalidate_filter ();
+        //  });
 
-        search_entry.search_changed.connect (() => {
-            local_group.invalidate_filter ();
-            todoist_group.invalidate_filter ();
-        });
+        signal_map[Services.EventBus.get_default ().project_picker_changed.connect ((id) => {
+            _project = Services.Store.instance ().get_project (id);
+        })] = Services.EventBus.get_default ();
 
-        Services.EventBus.get_default ().project_picker_changed.connect ((id) => {
-            _project = Services.Database.get_default ().get_project (id);
-        });
+        signal_map[Services.EventBus.get_default ().section_picker_changed.connect ((id) => {
+            _section = Services.Store.instance ().get_section (id);
+        })] = Services.EventBus.get_default ();
 
-        Services.EventBus.get_default ().section_picker_changed.connect ((id) => {
-            _section = Services.Database.get_default ().get_section (id);
-        });
-
-        submit_button.clicked.connect (() => {
+        signal_map[submit_button.clicked.connect (() => {
             if (main_stack.visible_child_name == "projects") {
                 changed ("project", project.id);
             } else {
@@ -150,47 +166,58 @@ public class Dialogs.ProjectPicker.ProjectPicker : Adw.Window {
             }
 
             hide_destroy ();
+        })] = submit_button;
+
+        var destroy_controller = new Gtk.EventControllerKey ();
+        add_controller (destroy_controller);
+        signal_map[destroy_controller.key_released.connect ((keyval, keycode, state) => {
+            if (keyval == 65307) {
+                hide_destroy ();
+            }
+        })] = destroy_controller;
+
+        closed.connect (() => {
+            foreach (var entry in signal_map.entries) {
+                entry.value.disconnect (entry.key);
+            }
+
+            signal_map.clear ();
+            
+            Services.EventBus.get_default ().connect_typing_accel ();
         });
     }
 
     private Gtk.Widget build_projects_view () {
-        inbox_group = new Layouts.HeaderItem (null);
-        inbox_group.show_action = false;
+        inbox_group = new Layouts.HeaderItem (null) {
+            margin_top = 12,
+            card = true,
+            reveal = true
+        };
 
-        local_group = new Layouts.HeaderItem (_("On this Computer"));
-        local_group.show_action = false;
+        inbox_group.add_child (
+            new Dialogs.ProjectPicker.ProjectPickerRow (Services.Store.instance ().get_inbox_project ())
+        );
 
-        todoist_group = new Layouts.HeaderItem (_("Todoist"));
-        todoist_group.show_action = false;
-
-        if (backend_type == BackendType.ALL) {
-            inbox_group.reveal = true;
-            local_group.reveal = true;
-            todoist_group.reveal = true;
-        } else if (backend_type == BackendType.LOCAL) {
-            local_group.reveal = true;
-        } else if (backend_type == BackendType.TODOIST) {
-            todoist_group.reveal = true;
-        }
-
-        local_group.set_filter_func (filter_func);
-        todoist_group.set_filter_func (filter_func);
-        
-        var scrolled_box = new Gtk.Box (Gtk.Orientation.VERTICAL, 0) {
+        var scrolled_box = new Gtk.Box (Gtk.Orientation.VERTICAL, 6) {
             margin_start = 12,
             margin_end = 12
         };
         scrolled_box.append (inbox_group);
-        scrolled_box.append (local_group);
-        scrolled_box.append (todoist_group);
 
+        if (all_sources) {
+            foreach (Objects.Source source in Services.Store.instance ().sources) {
+                scrolled_box.append (new Dialogs.ProjectPicker.ProjectPickerSourceRow (source));
+            }
+        } else {
+            scrolled_box.append (new Dialogs.ProjectPicker.ProjectPickerSourceRow (source));
+        }
+        
         var scrolled = new Gtk.ScrolledWindow () {
             hexpand = true,
             vexpand = true,
-            hscrollbar_policy = Gtk.PolicyType.NEVER
+            hscrollbar_policy = Gtk.PolicyType.NEVER,
+            child = scrolled_box
         };
-
-        scrolled.child = scrolled_box;
 
         return scrolled;
     }
@@ -214,7 +241,7 @@ public class Dialogs.ProjectPicker.ProjectPicker : Adw.Window {
         };
         
         sections_listbox_grid.attach (sections_listbox, 0, 0);
-        sections_listbox_grid.add_css_class (Granite.STYLE_CLASS_CARD);
+        sections_listbox_grid.add_css_class ("card");
 
         var scrolled = new Gtk.ScrolledWindow () {
             hexpand = true,
@@ -225,22 +252,6 @@ public class Dialogs.ProjectPicker.ProjectPicker : Adw.Window {
         scrolled.child = sections_listbox_grid;
 
         return scrolled;
-    }
-
-    private void add_projects () {
-        foreach (Objects.Project project in Services.Database.get_default ().projects) {
-            projects_hashmap [project.id_string] = new Dialogs.ProjectPicker.ProjectPickerRow (project);
-            
-            if (project.is_inbox_project) {
-                inbox_group.add_child (projects_hashmap [project.id_string]);
-            } else {
-                if (project.backend_type == BackendType.LOCAL) {
-                    local_group.add_child (projects_hashmap [project.id_string]);
-                } else if (project.backend_type == BackendType.TODOIST) {
-                    todoist_group.add_child (projects_hashmap [project.id_string]);
-                }
-            }
-        }
     }
 
     public void add_sections (Gee.ArrayList<Objects.Section> sections) {
@@ -255,17 +266,7 @@ public class Dialogs.ProjectPicker.ProjectPicker : Adw.Window {
         }
     }
 
-    private bool filter_func (Gtk.ListBoxRow row) {
-        var project = ((Dialogs.ProjectPicker.ProjectPickerRow) row).project;
-        return search_entry.text.down () in project.name.down ();
-    }
-
     public void hide_destroy () {
-        hide ();
-
-        Timeout.add (500, () => {
-            destroy ();
-            return GLib.Source.REMOVE;
-        });
+        close ();
     }
 }

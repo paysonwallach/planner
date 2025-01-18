@@ -36,14 +36,14 @@
      * Gets the timezone of the given TimeType as a GLib.TimeZone.
      */
     public TimeZone timezone_from_ical (ICal.Time date) {
-        // Special case: dates are floating, so return local time zone
+        // Special case: dates are floating, so return local time zone // vala-lint=note
         if (date.is_date ()) {
             return new GLib.TimeZone.local ();
         }
 
         unowned string? tzid = date.get_tzid ();
         if (tzid == null) {
-            // In libical, null tzid means floating time
+            // In libical, null tzid means floating time // vala-lint=note
             assert (date.get_timezone () == null);
             return new GLib.TimeZone.local ();
         }
@@ -101,32 +101,6 @@
         }
     }
 
-    private Gee.HashMap<string, Gtk.CssProvider>? providers;
-    public void set_component_calendar_color (E.SourceSelectable selectable, Gtk.Widget widget) {
-        //  if (providers == null) {
-        //      providers = new Gee.HashMap<string, Gtk.CssProvider> ();
-        //  }
-
-        //  var color = selectable.dup_color ();
-        //  if (!providers.has_key (color)) {
-        //      string style = """
-        //          @define-color accent_color %s;
-        //      """.printf (color);
-
-        //      try {
-        //          var style_provider = new Gtk.CssProvider ();
-        //          style_provider.load_from_data (style, style.length);
-
-        //          providers[color] = style_provider;
-        //      } catch (Error e) {
-        //          critical ("Unable to set calendar color: %s", e.message);
-        //      }
-        //  }
-
-        //  unowned Gtk.StyleContext style_context = widget.get_style_context ();
-        //  style_context.add_provider (providers[color], Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION);
-    }
-
     /*
      * Gee Utility Functions
      */
@@ -175,6 +149,7 @@
         ICal.Time? end_time = icomp.get_dtend ();
 
         if (due_time != null && !due_time.is_null_time ()) {
+            // vala-lint=note
             // RFC 2445 Section 4.8.2.3: The property DUE
             // can only be specified in a "VTODO" calendar
             // component. Therefore we are dealing with a
@@ -220,6 +195,7 @@
         ICal.Time? end_time = icomp.get_dtend ();
 
         if (due_time != null && !due_time.is_null_time ()) {
+            // vala-lint=note
             // RFC 2445 Section 4.8.2.3: The property DUE
             // can only be specified in a "VTODO" calendar
             // component. Therefore we are dealing with a

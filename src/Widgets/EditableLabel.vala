@@ -1,3 +1,24 @@
+/*
+* Copyright © 2023 Alain M. (https://github.com/alainm23/planify)
+*
+* This program is free software; you can redistribute it and/or
+* modify it under the terms of the GNU General Public
+* License as published by the Free Software Foundation; either
+* version 3 of the License, or (at your option) any later version.
+*
+* This program is distributed in the hope that it will be useful,
+* but WITHOUT ANY WARRANTY; without even the implied warranty of
+* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+* General Public License for more details.
+*
+* You should have received a copy of the GNU General Public
+* License along with this program; if not, write to the
+* Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
+* Boston, MA 02110-1301 USA
+*
+* Authored by: Alain M. <alainmh23@gmail.com>
+*/
+
 public class Widgets.EditableLabel : Gtk.Grid {
 	public string placeholder_text { get; construct; }
 	public bool auto_focus { get; construct; }
@@ -8,7 +29,8 @@ public class Widgets.EditableLabel : Gtk.Grid {
 	private Gtk.Label title;
 	private Widgets.Entry entry;
 	private Gtk.Stack stack;
-	private Gtk.Grid grid;
+	private Gtk.Box grid;
+	private Gtk.Revealer edit_revealer;
 
 	public string text { get; set; }
 	public bool entry_menu_opened { get; set; default = false; }
@@ -16,6 +38,12 @@ public class Widgets.EditableLabel : Gtk.Grid {
 	public bool is_editing {
 		get {
 			return stack.visible_child == entry;
+		}
+	}
+
+	public bool show_edit {
+		set {
+			edit_revealer.reveal_child = value;
 		}
 	}
 
@@ -54,30 +82,40 @@ public class Widgets.EditableLabel : Gtk.Grid {
 		Object (
 			placeholder_text: placeholder_text,
 			auto_focus: auto_focus
-			);
+		);
 	}
 
 	construct {
-		add_css_class ("editable-label");
-
 		title = new Gtk.Label (null) {
 			ellipsize = Pango.EllipsizeMode.END,
 			xalign = 0
 		};
 
-		grid = new Gtk.Grid () {
-			valign = Gtk.Align.CENTER,
-			column_spacing = 12
+		var edit_icon = new Gtk.Image.from_icon_name ("edit-symbolic") {
+			css_classes = { "dim-label" },
+			pixel_size = 16
 		};
 
-		grid.attach (title, 0, 0);
+		edit_revealer = new Gtk.Revealer () {
+            transition_type = Gtk.RevealerTransitionType.CROSSFADE,
+            child = edit_icon
+        };
+
+		grid = new Gtk.Box (Gtk.Orientation.HORIZONTAL, 12) {
+			valign = Gtk.Align.CENTER
+		};
+
+		grid.append (title);
+		grid.append (edit_revealer);
 
 		entry = new Widgets.Entry () {
-			placeholder_text = placeholder_text
+			placeholder_text = placeholder_text,
+			css_classes = { "editable-label" }
 		};
 
 		stack = new Gtk.Stack () {
 			transition_type = Gtk.StackTransitionType.CROSSFADE,
+			transition_duration = 115,
 			hexpand = true
 		};
 
@@ -90,9 +128,7 @@ public class Widgets.EditableLabel : Gtk.Grid {
 
 		if (auto_focus) {
 			var gesture_click = new Gtk.GestureClick ();
-			gesture_click.set_button (1);
 			add_controller (gesture_click);
-
 			gesture_click.pressed.connect (() => {
 				editing (true);
 			});

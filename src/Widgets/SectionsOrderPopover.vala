@@ -1,3 +1,24 @@
+/*
+* Copyright © 2023 Alain M. (https://github.com/alainm23/planify)
+*
+* This program is free software; you can redistribute it and/or
+* modify it under the terms of the GNU General Public
+* License as published by the Free Software Foundation; either
+* version 3 of the License, or (at your option) any later version.
+*
+* This program is distributed in the hope that it will be useful,
+* but WITHOUT ANY WARRANTY; without even the implied warranty of
+* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+* General Public License for more details.
+*
+* You should have received a copy of the GNU General Public
+* License along with this program; if not, write to the
+* Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
+* Boston, MA 02110-1301 USA
+*
+* Authored by: Alain M. <alainmh23@gmail.com>
+*/
+
 public class Widgets.SectionsOrderPopover : Gtk.Popover {
     public Objects.Project project { get; construct; }
 
@@ -62,13 +83,12 @@ public class Widgets.SectionsOrderItem : Gtk.ListBoxRow {
     }
 
     construct {
-        add_css_class ("selectable-item");
+        add_css_class ("no-selectable");
         add_css_class ("transition");
 
-        var order_icon = new Widgets.DynamicIcon ();
-        order_icon.size = 16;
-        order_icon.update_icon_name ("menu");
-        order_icon.add_css_class ("dim-label");
+        var order_icon = new Gtk.Image.from_icon_name ("list-drag-handle-symbolic") {
+            css_classes = { "dim-label" }
+        };
 
         var widget_color = new Gtk.Grid () {
             height_request = 12,
@@ -142,9 +162,6 @@ public class Widgets.SectionsOrderItem : Gtk.ListBoxRow {
             var picked_widget = (Widgets.SectionsOrderItem) value;
             var target_widget = this;
 
-            Gtk.Allocation alloc;
-            target_widget.get_allocation (out alloc);
-
             picked_widget.drag_end ();
             target_widget.drag_end ();
 
@@ -159,7 +176,7 @@ public class Widgets.SectionsOrderItem : Gtk.ListBoxRow {
             source_list.remove (picked_widget);
             
             if (target_widget.get_index () == 0) {
-                if (y > (alloc.height / 2)) {
+                if (y > (target_widget.get_height () / 2)) {
                     position = target_widget.get_index () + 1;
                 }
             } else {

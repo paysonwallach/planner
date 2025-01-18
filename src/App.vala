@@ -1,3 +1,24 @@
+/*
+ * Copyright © 2023 Alain M. (https://github.com/alainm23/planify)
+ *
+ * This program is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public
+ * License as published by the Free Software Foundation; either
+ * version 3 of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public
+ * License along with this program; if not, write to the
+ * Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
+ * Boston, MA 02110-1301 USA
+ *
+ * Authored by: Alain M. <alainmh23@gmail.com>
+ */
+
 public class Planify : Adw.Application {
 	public MainWindow main_window;
 
@@ -12,32 +33,41 @@ public class Planify : Adw.Application {
 	}
 
 	private static bool run_in_background = false;
-	private static bool version = false;
+	private static bool n_version = false;
 	private static bool clear_database = false;
 	private static string lang = "";
 
 	private Xdp.Portal? portal = null;
 
 	private const OptionEntry[] OPTIONS = {
-		{ "version", 'v', 0, OptionArg.NONE, ref version, "Display version number", null },
-		{ "reset", 'r', 0, OptionArg.NONE, ref clear_database, "Reset Planner", null },
+		{ "version", 'v', 0, OptionArg.NONE, ref n_version, "Display version number", null },
+		{ "reset", 'r', 0, OptionArg.NONE, ref clear_database, "Reset Planify", null },
 		{ "background", 'b', 0, OptionArg.NONE, out run_in_background, "Run the Application in background", null },
-		{ "lang", 'l', 0, OptionArg.STRING, ref lang, "Open Planner in a specific language", "LANG" },
+		{ "lang", 'l', 0, OptionArg.STRING, ref lang, "Open Planify in a specific language", "LANG" },
 		{ null }
 	};
 
-	construct {
-		application_id = "io.github.alainm23.planify";
-		flags |= ApplicationFlags.HANDLES_OPEN;
+	public Planify () {
+		Object (
+			application_id: Build.APPLICATION_ID,
+			flags: ApplicationFlags.HANDLES_OPEN
+		);
+	}
 
+	~Planify () {
+		print ("Destroying Planify\n");
+	}
+
+	construct {
 		Intl.setlocale (LocaleCategory.ALL, "");
-		string langpack_dir = Path.build_filename (Constants.INSTALL_PREFIX, "share", "locale");
-		Intl.bindtextdomain (Constants.GETTEXT_PACKAGE, langpack_dir);
-		Intl.bind_textdomain_codeset (Constants.GETTEXT_PACKAGE, "UTF-8");
-		Intl.textdomain (Constants.GETTEXT_PACKAGE);
+		string langpack_dir = Path.build_filename (Build.INSTALL_PREFIX, "share", "locale");
+		Intl.bindtextdomain (Build.GETTEXT_PACKAGE, langpack_dir);
+		Intl.bind_textdomain_codeset (Build.GETTEXT_PACKAGE, "UTF-8");
+		Intl.textdomain (Build.GETTEXT_PACKAGE);
 
 		add_main_option_entries (OPTIONS);
 		create_dir_with_parents ("/io.github.alainm23.planify");
+		create_dir_with_parents ("/io.github.alainm23.planify/backups");
 	}
 
 	protected override void activate () {
@@ -45,13 +75,24 @@ public class Planify : Adw.Application {
 			GLib.Environment.set_variable ("LANGUAGE", lang, true);
 		}
 
-		if (version) {
-			print ("%s\n".printf (Constants.VERSION));
+		if (n_version) {
+			debug ("%s\n".printf (Build.VERSION));
 			return;
 		}
 
+		if (clear_database) {
+			stdout.printf (_("Are you sure you want to reset all? (y/n): "));
+			string? option = stdin.read_line ();
+
+			if (option.down () == _("y") || option.down () == _("yes")) {
+				Services.Database.get_default ().clear_database ();
+				Services.Settings.get_default ().reset_settings ();
+				return;
+			}
+		}
+
 		if (main_window != null) {
-			main_window.show ();
+			main_window.present ();
 			return;
 		}
 
@@ -72,23 +113,19 @@ public class Planify : Adw.Application {
 
 		var provider = new Gtk.CssProvider ();
 		provider.load_from_resource ("/io/github/alainm23/planify/index.css");
+
 		Gtk.StyleContext.add_provider_for_display (
 			Gdk.Display.get_default (), provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
-		);
+			);
 
 		Util.get_default ().update_theme ();
 
-		if (Services.Settings.get_default ().settings.get_string ("version") != Constants.VERSION) {
-			Services.Settings.get_default ().settings.set_string ("version", Constants.VERSION);
-
-			//  var dialog = new Dialogs.WhatsNew ();
-			//  dialog.show ();
+		if (Services.Settings.get_default ().settings.get_string ("version") != Build.VERSION) {
+			Services.Settings.get_default ().settings.set_boolean ("show-support-banner", true);
 		}
 
-		if (clear_database) {
-			Util.get_default ().clear_database (_("Are you sure you want to reset all?"),
-			                                    _("The process removes all stored information without the possibility of undoing it."));
-		}
+		// Actions
+		build_shortcuts ();
 	}
 
 	public async bool ask_for_background (Xdp.BackgroundFlags flags = Xdp.BackgroundFlags.AUTOSTART) {
@@ -98,9 +135,7 @@ public class Planify : Adw.Application {
 		}
 
 		string reason = _(
-			"Planify will automatically start when this device turns on " +
-			"and run when its window is closed so that it can send to-do notifications."
-			);
+			"Planify will automatically start when this device turns on " + "and run when its window is closed so that it can send to-do notifications.");
 		var command = new GenericArray<unowned string> (2);
 		foreach (unowned var arg in DAEMON_COMMAND) {
 			command.add (arg);
@@ -111,7 +146,7 @@ public class Planify : Adw.Application {
 		try {
 			return yield portal.request_background (window, reason, command, flags, null);
 		} catch (Error e) {
-			print ("Error during portal request: %s".printf (e.message));
+			debug ("Error during portal request: %s".printf (e.message));
 			return e is IOError.FAILED;
 		}
 	}
@@ -124,9 +159,21 @@ public class Planify : Adw.Application {
 		}
 	}
 
+	private void build_shortcuts () {
+		var show_item = new SimpleAction ("show-item", VariantType.STRING);
+		show_item.activate.connect ((parameter) => {
+			Planify.instance.main_window.view_item (parameter.get_string ());
+			activate ();
+		});
+
+		add_action (show_item);
+	}
+
 	public static int main (string[] args) {
 		// NOTE: Workaround for https://github.com/alainm23/planify/issues/1069
 		GLib.Environment.set_variable ("WEBKIT_DISABLE_COMPOSITING_MODE", "1", true);
+		// NOTE: Workaround for https://github.com/alainm23/planify/issues/1120
+		GLib.Environment.set_variable ("WEBKIT_DISABLE_DMABUF_RENDERER", "1", true);
 
 		Planify app = Planify.instance;
 		return app.run (args);

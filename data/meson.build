@@ -3,6 +3,7 @@
 ###########
 
 desktop_conf = configuration_data()
+desktop_conf.set('exec', application_id)
 desktop_conf.set('icon', application_id)
 desktop_file = i18n.merge_file(
   input: configure_file(
@@ -51,5 +52,25 @@ if compile_schemas.found()
     args: ['--strict', '--dry-run', meson.current_source_dir()]
   )
 endif
+
+install_data('markdown.xml',
+  install_dir: get_option('datadir') / 'gtksourceview-5' / 'styles'
+)
+install_data('markdown_dark.xml',
+  install_dir: get_option('datadir') / 'gtksourceview-5' / 'styles'
+)
+install_data('markdownpp.lang',
+  install_dir: get_option('datadir') / 'gtksourceview-5' / 'language-specs'
+)
+
+# service_conf = configuration_data()
+# service_conf.set('appid', application_id)
+# service_conf.set('bindir', bindir)
+# configure_file(
+#   input: 'io.github.alainm23.planify.service.in',
+#   output: '@0@.service'.format(application_id),
+#   configuration: service_conf,
+#   install_dir: datadir / 'dbus-1' / 'services'
+# )
 
 subdir('icons')

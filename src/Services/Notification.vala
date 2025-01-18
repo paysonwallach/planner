@@ -1,5 +1,5 @@
 /*
-* Copyright © 2019 Alain M. (https://github.com/alainm23/planner)
+* Copyright © 2023 Alain M. (https://github.com/alainm23/planify)
 *
 * This program is free software; you can redistribute it and/or
 * modify it under the terms of the GNU General Public
@@ -42,42 +42,33 @@ public class Services.Notification : GLib.Object {
             reminders.clear ();
         }
 
-        foreach (var reminder in Services.Database.get_default ().reminders) {
+        foreach (var reminder in Services.Store.instance ().reminders) {
             reminder_added (reminder);
         }
 
-        Services.Database.get_default ().reminder_added.connect ((reminder) => {
+        Services.Store.instance ().reminder_added.connect ((reminder) => {
             reminder_added (reminder);
         });
 
-        Services.Database.get_default ().reminder_deleted.connect ((reminder) => {
-            if (reminders.has_key (reminder.id_string)) {
-                reminders.unset (reminder.id_string);
+        Services.Store.instance ().reminder_deleted.connect ((reminder) => {
+            if (reminders.has_key (reminder.id)) {
+                reminders.unset (reminder.id);
             }
         });
     }
 
     private void reminder_added (Objects.Reminder reminder) {
-        if (reminder.due.datetime.compare (new GLib.DateTime.now_local ()) <= 0) {
-            var notification = new GLib.Notification (reminder.item.project.short_name);
-            notification.set_body (reminder.item.content);
-            notification.set_icon (new ThemedIcon ("io.github.alainm23.planify"));
-            notification.set_priority (GLib.NotificationPriority.URGENT);
-
-            notification.set_default_action_and_target_value (
-                "app.show-item",
-                new Variant.string (reminder.item_id)
-            );
-
-            Planify.instance.send_notification (reminder.id_string, notification);
-            Services.Database.get_default ().delete_reminder (reminder);
-        } else if (Granite.DateTime.is_same_day (reminder.due.datetime, new GLib.DateTime.now_local ())) {
-            var interval = (uint) time_until_now (reminder.due.datetime);
-            var uid = "%u-%u".printf (interval, GLib.Random.next_int ());
-            reminders.set (reminder.id_string, uid);
+        if (reminder.datetime.compare (new GLib.DateTime.now_local ()) <= 0) {
+            GLib.Notification notification = build_notification (reminder);
+            Planify.instance.send_notification (reminder.id, notification);
+            Services.Store.instance ().delete_reminder (reminder);
+        } else if (Utils.Datetime.is_same_day (reminder.datetime, new GLib.DateTime.now_local ())) {
+            uint interval = (uint) time_until_now (reminder.datetime);
+            string uid = "%u-%u".printf (interval, GLib.Random.next_int ());
+            reminders.set (reminder.id, uid);
             
             Timeout.add_seconds (interval, () => {
-                queue_reminder_notification (reminder.id, uid);
+                queue_reminder_notification (reminder, uid);
                 return GLib.Source.REMOVE;
             });
         }
@@ -88,23 +79,27 @@ public class Services.Notification : GLib.Object {
         return dt.difference (now) / TimeSpan.SECOND;
     }
 
-    public void queue_reminder_notification (string reminder_id, string uid) {
+    private void queue_reminder_notification (Objects.Reminder reminder, string uid) {
         if (reminders.values.contains (uid) == false) {
             return;
         }
 
-        var reminder = Services.Database.get_default ().get_reminder (reminder_id);
-        var notification = new GLib.Notification (reminder.item.project.short_name);
+        GLib.Notification notification = build_notification (reminder);
+        Planify.instance.send_notification (uid, notification);
+        Services.Store.instance ().delete_reminder (reminder);
+    }
+
+    private GLib.Notification build_notification (Objects.Reminder reminder) {
+        var notification = new GLib.Notification (reminder.item.project.name);
         notification.set_body (reminder.item.content);
         notification.set_icon (new ThemedIcon ("io.github.alainm23.planify"));
         notification.set_priority (GLib.NotificationPriority.URGENT);
-
-        notification.set_default_action_and_target_value (
-            "app.show-item",
-            new Variant.string (reminder.item_id)
-        );
-
-        Planify.instance.send_notification (uid, notification);
-        Services.Database.get_default ().delete_reminder (reminder);
+        notification.set_default_action_and_target_value ("show-item", new Variant.string (reminder.item_id));
+        //  notification.add_button (_("Complete"), "complete");
+        //  notification.add_button (_("Snooze for 10 minutes"), "complete");
+        //  notification.add_button (_("Snooze for 30 minutes"), "complete");
+        //  notification.add_button (_("Snooze for 1 hour"), "complete");
+        
+        return notification;
     }
 }

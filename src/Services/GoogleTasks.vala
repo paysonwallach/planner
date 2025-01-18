@@ -1,5 +1,5 @@
 /*
-* Copyright © 2019 Alain M. (https://github.com/alainm23/planner)
+* Copyright © 2023 Alain M. (https://github.com/alainm23/planify)
 *
 * This program is free software; you can redistribute it and/or
 * modify it under the terms of the GNU General Public
@@ -56,16 +56,17 @@ public class Services.GoogleTasks : GLib.Object {
     }
 
     public async void request_access_token (string authorization_code) {
+        // vala-lint=naming-convention
         string requestBody = "code=" + authorization_code +
                              "&client_id=" + CLIENT_ID +
                              "&client_secret=" + CLIENT_SECRET +
                              "&redirect_uri=" + REDIRECT_URI +
-                             "&grant_type=authorization_code";
+                             "&grant_type=authorization_code"; // vala-lint=naming-convention
         
         var message = new Soup.Message ("POST", TOKEN_ENDPOINT);
 
-        message.request_headers.append("Content-Type", "application/x-www-form-urlencoded");
-        message.set_request_body_from_bytes("application/x-www-form-urlencoded", new GLib.Bytes (requestBody.data));
+        message.request_headers.append ("Content-Type", "application/x-www-form-urlencoded");
+        message.set_request_body_from_bytes ("application/x-www-form-urlencoded", new GLib.Bytes (requestBody.data));
 
         try {
             GLib.Bytes stream = yield session.send_and_read_async (message, GLib.Priority.HIGH, null);
@@ -123,7 +124,7 @@ public class Services.GoogleTasks : GLib.Object {
         }
     }
 
-    private async void  get_taskslist (string access_token) {
+    private async void get_taskslist (string access_token) {
         string url = API_ENDPOINT + "tasks/v1/users/@me/lists";
 
         var message = new Soup.Message ("GET", url);
@@ -138,7 +139,7 @@ public class Services.GoogleTasks : GLib.Object {
 
             unowned Json.Array _taskslist = parser.get_root ().get_object ().get_array_member ("items");
             foreach (unowned Json.Node _node in _taskslist.get_elements ()) {
-                Objects.Project? project = Services.Database.get_default ().get_project (_node.get_object ().get_string_member ("id"));
+                Objects.Project? project = Services.Store.instance ().get_project (_node.get_object ().get_string_member ("id"));
                 if (project != null) {
                     //  if (_node.get_object ().get_boolean_member ("is_deleted")) {
                     //      Services.Database.get_default ().delete_project (project);
@@ -158,7 +159,7 @@ public class Services.GoogleTasks : GLib.Object {
                     //      }
                     //  }
                 } else {
-                    Services.Database.get_default ().insert_project (new Objects.Project.from_google_tasklist_json (_node));
+                    Services.Store.instance ().insert_project (new Objects.Project.from_google_tasklist_json (_node));
                 }
             }
         } catch (Error e) {
@@ -193,6 +194,6 @@ public class Services.GoogleTasks : GLib.Object {
     private void print_root (Json.Node root) {
         Json.Generator generator = new Json.Generator ();
         generator.set_root (root);
-        print (generator.to_data (null) + "\n");
+        debug (generator.to_data (null) + "\n");
     }
 }
